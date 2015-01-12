@@ -13,6 +13,7 @@ This tool currently allows users to plot variables such as the mass density, tem
 _Don't, yet. A few more major things need to be addressed. If you're interested in the project, please email me._
 
 On linux systems, (tested so far on Ubuntu 14.04, running the Anaconda python distribution), first ensure you have the following dependancies:
+* Gfortran (sudo apt-get install gfortran)
 * Numpy
 * Matplotlib 
 * Basemap
@@ -21,6 +22,7 @@ On linux systems, (tested so far on Ubuntu 14.04, running the Anaconda python di
 Then:
 ```{sh}
 git clone https://github.com/lkilcommons/atmodexplorer.git
+cd atmodexplorer
 python setup.py build
 python setup.py install
 ```
