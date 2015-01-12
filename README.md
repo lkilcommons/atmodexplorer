@@ -1,11 +1,14 @@
 # AtModExplorer
-### _An (emperical) atmospheric model explorer_
-This is a project of the University of Colorado Space Environment Data Analysis Group (SEDA), a part of the Colorado Center for Astrodynamics Research (CCAR).
-_Currently in early development. There is a dependancy (the model code) which is not yet available publicly, so stay tuned_
+### _An (empirical) atmospheric model explorer_
+This is a project of the University of Colorado Space Environment Data Analysis Group (SEDA), a part of the Colorado Center for Astrodynamics Research (CCAR), and Aerospace Engineering Sciences (AES).
+
+This tool was inspired by the similar IDL tool developed at National Center for Atmospheric Research's High Altitude Observatory (NCAR HAO) in 2003 as part of the CISM summer school.
+
+_We're Currently in early development. There is a dependancy (the model code) which is not yet available publicly, so stay tuned_
 
 ### About 
 
-The AtModExplorer is a PyQT4 based GUI for plotting real-time results from the Naval Research Laboratory Mass-Spec and Incoherent Scatter Radar Model of the neutral atmosphere ([NRLMSISE00](http://www.nrl.navy.mil/research/nrl-review/2003/atmospheric-science/picone/)). This model is maintained by NRL, and is used operationally and for research in the atmospheric and space sciences. 
+The AtModExplorer is a PyQT4 based GUI for plotting results from the Naval Research Laboratory Mass-Spec and Incoherent Scatter Radar Model of the neutral atmosphere ([NRLMSISE00](http://www.nrl.navy.mil/research/nrl-review/2003/atmospheric-science/picone/)). This model is maintained by NRL.
 
 This tool currently allows users to plot variables such as the mass density, temperature and number densities of various major atmospheric chemical constituants (O, O2, N, Ar, N2, etc.). It allows uses to plot these against various position coordinates such as latitude, longitude and altitude, on pseudocolor (heatmap) plots, line graphs, or on top of various map projections. 
 
