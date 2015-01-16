@@ -1,4 +1,3 @@
-#Cut and paste from Matplotlib example for embedding GUI in PyQT 
 import sys
 import os
 import random
@@ -6,7 +5,7 @@ from matplotlib.backends import backend_qt4
 import matplotlib.widgets as widgets
 import matplotlib.axes
 from PyQt4 import QtGui, QtCore, Qt
-from PyQt4.QtCore import SIGNAL,SLOT
+from PyQt4.QtCore import SIGNAL,SLOT,pyqtSlot,pyqtSignal
 
 #Main imports
 import numpy as np
@@ -28,167 +27,147 @@ from matplotlib.colors import LogNorm, Normalize
 import msispy
 from collections import OrderedDict
 
-class canvasClick(object):
-	def __init__(self,ch,event):
-		"""An instance is spawned by canvasClickHandler every time the user clicks on the canvas. 
-			Tracks click locations and which axes they occur in"""
-		self.ch = ch #Click Handler
-		#Pull information from the event which caused this Click object to be created
-		self.ax = event.inaxes #Which axes the click occured in
-		if self.ax is None:
-			raise RuntimeError('A canvasClick object should only be spawned when the triggering click occurs in a valid Matplotlib axes')
 
-		#Click location
-		self.x = event.xdata 
-		self.y = event.ydata 
-		
-		#Associated data 
-		self.xdata = self.ch.x
-		self.ydata = self.ch.y
-		self.zdata = self.ch.z
-
-		#Figure out which point was closest to this click
-		
-		#Compute the Euclidian distance between all points in the userdata and the clicked one
-		dist = np.sqrt((self.xdata-self.x)**2+(self.ydata-self.y)**2)
-
-		self.ind = dist.argmin() #index of the closest point to the click location 
-		
-		self.clx = self.xdata[self.ind]#Closest datapoint x coordinate in clickhandler.user_xdata
-		self.cly = self.ydata[self.ind]#Closest datapoint y coordinate in clickhandler.user_ydata
-		self.clz = self.zdata[self.ind]#Closest datapoint z coordinate in clickhandler.user_ydata
-
-		#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
-		#Add the plotted line to the clicked list
-		self.lines = self.ax.plot(self.clx,self.cly,'mo',alpha=.8)
-
-		#Show a message for each click in the app status bar
-		self.ch.canvas.aw.statusBar().showMessage("%s:%f, %s:%f, %s:%f" % (self.ch.canvas.controlstate['xvar'],self.clx,
-																			self.ch.canvas.controlstate['yvar'],self.cly,
-																			self.ch.canvas.controlstate['zvar'],self.clz), 2000)
-
-
-	def __str__(self):
-		return "Click pxl: (%d,%d), Click closest: (%.2f,%.2f,%.2f), click axes: %s, click index: %d" % (self.x,self.y,\
-			self.clx,self.cly,self.clz,str(self.ax),self.ind) 
-
-	def asTuple(self):
-		return self.ind,self.x,self.y,self.clx,self.cly,self.clz
-
-	def set_visible(self,val):
-		"""Turn the dot highlighting this click location invisible"""
-		for ln in self.lines:
-			ln.set_visible(val)
-
-class canvasClickHandler(object):
-	def __init__(self, canvas):
-		"""Takes a canvas object, connects itself to mouseclick events
-and figures out where the click was located, and the closest point to the click location
-in the canvas object's plot data"""
-		self.canvas = canvas
-		self.x = canvas.pdh.x.flatten()
-		self.y = canvas.pdh.y.flatten()
-		self.z = canvas.pdh.z.flatten()
-		self.cid = canvas.mpl_connect('button_press_event', self)
-		self.clicks = [] #List of canvasClick objects
-		self.saved_clicks = dict() #Save clicks by dict key
-			
-		
-	def __call__(self, event):
-		print 'click', event
-		
-		#Handle not being in the axes
-		if event.inaxes is None: 
-			return
-
-		if len(self.clicks) > 0:
-			#Turn last clicked location invisible
-			self.clicks[-1].set_visible(False)
-
-		#Create a canvasClick object to track this click
-		thisclick = canvasClick(self,event)
-		
-		#Add to the sequential list of clicks
-		self.clicks.append(thisclick)
-
-		#Redraw the canvas
-		self.canvas.draw()
-
-	def reset(self):
-		#Basically just calls __init__ again, but without rebinding the events
-		#Refreshes the connection to the userdata and clears out old clicks
-		#so we don't get any wierdness when the data changes
-		if self.canvas.pdh.x is not None:
-			self.x = self.canvas.pdh.x.flatten()
-		if self.canvas.pdh.y is not None:
-			self.y = self.canvas.pdh.y.flatten()
-		if self.canvas.pdh.z is not None:
-			self.z = self.canvas.pdh.z.flatten()
-		
-		self.clicks = [] #List of canvasClick objects
-		self.saved_clicks = dict() #A dictionary of click objects saved by calling canvasClickHandler.save 
-
-	def save(self,key):
-		"""Saves last clicked value and closest point into self.saved dictionary"""
-		self.saved_clicks[key] = self.clicks[-1]
-		print(self.saved_clicks[key])
-
-	def lastclick(self,ax=None):
-		"""Returns index,click x, click y, closest data x, closest data y for last click registered by clickHandler"""
-		return self.clicks[-1]
-
-	def load(self,key):
-		"""Retrieves click location / closest value saved into self.saved"""
-		return self.saved_clicks[key]
-
-class MsisRun(object):
-	""" Class for individual calls to NRLMSISE00 """
-	import msispy
-	from collections import OrderedDict
-
+class ModelRun(object):
+	
+	
 	def __init__(self):
-		"""Start with a blank slate"""
+		"""Class for individual calls to any model"""
 		self.dt = datetime.datetime(2000,6,21,12,0,0)
-		#Now we make links to these properties/attributes in 
+		
+		#Attributes which control how we do gridding
+		#if only one is > 1, then we do vectors
+		#
+
+		#Determines grid shape
+		self.xkey = None
+		self.ykey = None
+
+		#if two are > 1, then we do a grid
+		self.npts = OrderedDict()
+		self.npts['Latitude']=1
+		self.npts['Longitude']=1
+		self.npts['Altitude']=1
+		
 		#the cannocical 'vars' dictionary, which has 
 		#keys which are used to populate the combobox widgets,
 		self.vars = OrderedDict()
 		self.vars['Latitude']=None
 		self.vars['Longitude']=None
 		self.vars['Altitude']=None
+
+		#the limits dictionary serves two purposes, 
+		#1.) to constrain axes in the plots
+		#2.) to determine the variable boundaries when we're generating ranges of locations
 		self.lims = OrderedDict()
 		self.lims['Latitude']=[-90.,90.]
 		self.lims['Longitude']=[-180.,180.]
 		self.lims['Altitude']=[0.,1000.]
-		self.shape = None #Tells how to produce gridded output, or use column vectors if no grids
-		self.npts = None #Tells how many total points
+
+		self.shape = None #Tells how to produce gridded output, defaults (if None) to use column vectors
+		self.totalpts = None #Tells how many total points
+		self.peer = None #Can be either None, or another ModelRun, allows for comparing two runs
+
+	def hold_constant(self,key):
+		"""Holds an ephem variable constant by ensuring it's npts is 1s"""
+		if key in ['Latitude','Longitude','Altitude']:
+			self.npts[key] = 1
+		else:
+			raise RuntimeError('Cannot hold %s constant, not a variable!'%(key))
+
+	def set_x(self,key):
+		"""Sets an emphem variable as x"""
+		if key in ['Latitude','Longitude','Altitude']:
+			self.xkey = key
+		else:
+			raise RuntimeError('Cannot set %s as x, not a variable!'%(key))
+
+	def set_y(self,key):
+		"""Sets an emphem variable as y"""
+		if key in ['Latitude','Longitude','Altitude']:
+			self.ykey = key
+		else:
+			raise RuntimeError('Cannot set %s as y, not a variable!'%(key))
+
+
+	def populate(self):
+		"""Populates itself with data"""
+		#Make sure that everything has the same shape (i.e. either a grid or a vector of length self.npts)
+
+		#Count up the number of independant variables
+		nindependent=0
+		for key in self.npts:
+			if self.npts[key] > 1:
+				nindependent+=1
+				self.shape = (self.npts[key],1)
+
+		if nindependent>1: #If gridding set the shape
+			self.shape = (self.npts[self.xkey],self.npts[self.ykey])
+
+		#Populate the ephemeris variables as vectors
+		for var in ['Latitude','Longitude','Altitude']:
+			if self.npts[var]>1:
+					self.vars[var] = numpy.linspace(self.lims[var][0],self.lims[var][1],self.npts[var])
+			else:
+				if self.vars[var] is not None:
+					self.vars[var] = numpy.ones(self.shape)*self.vars[var]
+				else:
+					raise RuntimeError('Set %s to something first if you want to hold it constant.' % (var))
+			
+
+		if nindependent>1:
+			x = self.vars[self.xkey]
+			y = self.vars[self.ykey]
+			X,Y = numpy.meshgrid(x,y)
+			self.vars[self.xkey] = X
+			self.vars[self.ykey] = Y
+
+		#Now flatten everything to make the model call
+		self.flatlat=self.vars['Latitude'].flatten()
+		self.flatlon=self.vars['Longitude'].flatten()
+		self.flatalt=self.vars['Altitude'].flatten()
+		self.totalpts = len(self.flatlat)
+
+	def __getitem__(self,key):
+		"""Easy syntax for returning data"""
+		if self.peer is None:
+			return self.vars[key],self.lims[key]
+		else:
+			if key not in ['Latitude','Longitude','Altitude']:
+				print "Entering difference mode for var %s" % (key)
+				#Doesn't make sense to difference locations
+				mydata,mylims = self.vars[key],self.lims[key]
+				peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
+				newdata = mydata-peerdata
+				newlims = (numpy.nanmin(newdata.flatten()),numpy.nanmax(newdata.flatten()))
+				return newdata,newlims
+			else:
+				return self.vars[key],self.lims[key]
+
+class MsisRun(ModelRun):
+	""" Class for individual calls to NRLMSISE00 """
+	import msispy
+	
+	def __init__(self):
+		"""Start with a blank slate"""
+		#This syntax allows for multiple inheritance,
+		#we don't use it, but it's good practice to use this 
+		#instead of ModelRun.__init__()
+		super(MsisRun,self).__init__()
+
+	def populate(self):
+
+		super(MsisRun,self).populate()
 		
-
-	def __call__(self):
-		"""When the run is called, it populates itself with data"""
-
-		print "Now running NRLMSISE00 for %s...\n" % (self.dt.strftime('%c'))
-		#Make sure that everything has the same shape
-		if numpy.isscalar(self.vars['Latitude']):
-			self.vars['Latitude'] = numpy.ones(self.shape)*self.vars['Latitude']
-		if numpy.isscalar(self.vars['Longitude']):
-			self.vars['Longitude'] = numpy.ones(self.shape)*self.vars['Longitude']
-		if numpy.isscalar(self.vars['Altitude']):
-			self.vars['Altitude'] = numpy.ones(self.shape)*self.vars['Altitude']
-
-		#Now flatten everything to make the msis call
-		lat=self.vars['Latitude'].flatten()
-		lon=self.vars['Longitude'].flatten()
-		alt=self.vars['Altitude'].flatten()
-		self.npts = len(lat)
-		self.species,self.t_exo,self.t_alt,self.drivers = msispy.msis(self.dt,lat,lon,alt)
+		print "Now runing NRLMSISE00 for %s...\n" % (self.dt.strftime('%c'))
+		
+		self.species,self.t_exo,self.t_alt,self.drivers = msispy.msis(self.dt,self.flatlat,self.flatlon,self.flatalt)
 		
 		#Now add temperature the variables dictionary
 		self.vars['T_exospheric'] = self.t_exo
 		self.vars['Temperature'] = self.t_alt
 		
-		#Now add all of the different number and mass densities as
-		#references to to the vars dictionary
+		#Now add all of the different number and mass densities to to the vars dictionary
 		for s in self.species:
 			self.vars[s] = self.species[s]
 
@@ -201,8 +180,9 @@ class MsisRun(object):
 			self.vars[v] = numpy.reshape(self.vars[v],self.shape)
 			if v not in ['Latitude','Longitude','Altitude']:
 				self.lims[v] = [numpy.nanmin(self.vars[v].flatten()),numpy.nanmax(self.vars[v].flatten())]
-			#print "lims for var %s = [%f,%f]" % (v,self.lims[v][0],self.lims[v][1])		
+			#print "lims for var %s = [%f,%f]" % (v,self.lims[v][0],self.lims[v][1])
 
+	
 class ModelRunner(object):
 	""" Makes model calls """
 	def __init__(self,canvas):
@@ -214,20 +194,56 @@ class ModelRunner(object):
 		#Start with a blank msis run
 		self.nextrun = MsisRun()
 		self.nextrun.dt = datetime.datetime(2000,6,21,12,0,0) #Summer solstice
+		
+		#Set counters
 		self.n_total_runs=0
 		self.n_max_runs=10
+		
+		self._differencemode = False # Init the property
+
 		#Create the dictionary that stores the settings for the next run
 		
 	def __call__(self):
 		#Add to runs list, create a new nextrun
 		self.runs.append(self.nextrun)
 		self.nextrun = MsisRun()
+		if self.differencemode:
+			#Update the peering
+			self.nextrun.peer = self.runs[-1].peer
+		else:
+			for run in self.runs:
+				run.peer = None
+
 		self.n_total_runs+=1
 		print "Model run number %d added." % (self.n_total_runs)
 		if len(self.runs)>self.n_max_runs:
 			del self.runs[0]
 			print "Exceeded total number of stored runs %d. Run %d removed" %(self.n_max_runs,self.n_total_runs-self.n_max_runs)
 
+	#Implement a simple interface for retrieving data, which is opaque to whether or now we're differencing
+	#or which model we're using
+	def __getitem__(self,key):
+		"""Shorthand for self.runs[-1][key], which returns self.runs[-1].vars[key],self.runs[-1].lims[key]"""
+		return self.runs[-1][key]
+
+	def __setitem__(self,key,value):
+		"""Shorthand for self.nextrun[key]=value"""
+		self.nextrun[key]=value
+
+	#Make a property for the difference mode turning on or off, which automatically updates the last run peer
+	@property
+	def differencemode(self):
+		return self._differencemode
+
+	@differencemode.setter
+	def differencemode(self, boo):
+		print "Difference mode is now %s" % (str(boo))
+		if boo:
+			self.nextrun.peer = self.runs[-1]
+		else:
+			self.nextrun.peer = None
+		self._differencemode = boo
+		
 
 class plotDataHandler(object):
 	def __init__(self,canvas,plottype='line',cscale='linear',mapproj='moll'):
@@ -257,7 +273,7 @@ class plotDataHandler(object):
 		self.plottype = plottype
 		self.mapproj = mapproj # Map projection for Basemap
 
-		#Init the data variables/
+		#Init the data variables
 		self.clear_data()
 
 	def clear_data(self):
@@ -266,6 +282,7 @@ class plotDataHandler(object):
 		self.xbounds,self.ybounds,self.zbounds = None,None,None #must be 2 element tuple
 		self.xlog, self.ylog, self.zlog = False, False, False
 		self.npts = None
+		self.statistics = None # Information about each plotted data
 
 	def associate_data(self,varxyz,vardata,varname,varbounds,varlog):
 		#Sanity check 
@@ -304,8 +321,57 @@ class plotDataHandler(object):
 		else:
 			raise ValueError('%s is not a valid axes for plotting!' % (str(varaxes)))
 
+		
+
+	def compute_statistics(self):
+		self.statistics = OrderedDict()
+		if self.plottype=='line':
+			self.statistics['Mean-%s'%(self.xname)]=numpy.nanmean(self.x)
+			self.statistics['Mean-%s'%(self.yname)]=numpy.nanmean(self.y)
+			self.statistics['Median-%s'%(self.xname)]=numpy.median(self.x)
+			self.statistics['Median-%s'%(self.yname)]=numpy.median(self.y)
+			self.statistics['StDev-%s'%(self.xname)]=numpy.nanstd(self.x)
+			self.statistics['StDev-%s'%(self.yname)]=numpy.nanstd(self.y)
+		elif self.plottype=='map' or self.plottypes=='pcolor':
+			self.statistics['Mean-%s'%(self.zname)]=numpy.nanmean(self.z)
+			self.statistics['Median-%s'%(self.zname)]=numpy.median(self.z)
+			self.statistics['StDev-%s'%(self.zname)]=numpy.nanstd(self.z)
+			if self.plottype=='map':
+				self.statistics['Geo-Integrated-%s'%(self.zname)]=self.integrate_z()
 	
+	def integrate_z(self):
+		#If x and y and longitude and latitude
+		#integrates z over the grid
+		if self.xname=='Longitude':
+			lon=self.x.flatten()
+		elif self.yname=='Longitude':
+			lon=self.y.flatten()
+		else:
+			return numpy.nan
+		if self.xname=='Latitude':
+			lat=self.x.flatten()
+		elif self.yname=='Latitude':
+			lat=self.y.flatten()
+		else:
+			return numpy.nan
+		#a little hack to get the altitude
+		alt = self.canvas.controlstate['alt']
+		r_km = 6371.2+alt
+
+		zee = self.z.flatten()
+		zint = 0.
+		for k in xrange(len(lat)-1):
+			theta1 = (90.-lat[k])/180.*numpy.pi
+			theta2 = (90.-lat[k+1])/180.*numpy.pi
+			dphi = (lon[k+1]-lon[k])/180.*numpy.pi
+			zint +=  (zee[k]+zee[k+1])/2.*numpy.abs(r_km**2*dphi*(numpy.cos(theta1)-numpy.cos(theta2)))#area element
+		return zint
+
 	def plot(self,*args,**kwargs):
+		
+		if self.statistics is None:
+			self.compute_statistics()
+
 		self.ax.cla()
 		self.ax.set_adjustable('datalim')
 		self.map = None #Make sure that we don't leave any maps lying around if we're not plotting maps
@@ -454,7 +520,7 @@ class BoundsDialog(QtGui.QDialog):
 		maxstr = str(self.maxline.text())
 		return float(minstr),float(maxstr)
 
-	# static method to create the dialog and return (date, time, accepted)
+	# static method to create the dialog and return (axmin,axmax,True/False)
 	@staticmethod
 	def getMinMax(parent = None,initialbounds=None):
 		dialog = BoundsDialog(parent,initialbounds=initialbounds)
@@ -465,7 +531,12 @@ class BoundsDialog(QtGui.QDialog):
 class singleMplCanvas(FigureCanvas):
 	"""This is also ultimately a QWidget and a FigureCanvasAgg"""
 	#Prepare the signals that this can emit
-	canvasrefreshed = QtCore.pyqtSignal()
+	#this signal tells everything attached that the canvas has been redrawn
+	#it doesn't carry any data, because the updated model run is in
+	#the attached plotDataHandler (at self.pdh.runs[-1])
+	#and the new state of any control (UI control or internal) that has changed is in the 
+	#control state dictionary (self.controlstate)
+	canvasrefreshed = pyqtSignal()
 
 	def __init__(self,parent=None,appwindow=None,figsize=(5,4),dpi=200):
 		#QWidget stuff
@@ -502,7 +573,7 @@ class singleMplCanvas(FigureCanvas):
 						 'xvar':'Longitude','xbounds':[-180.,180.],'xnpts':50.,'xlog':False,\
 						 'yvar':'Latitude','ybounds':[-90.,90.],'ynpts':50.,'ylog':False,\
 						 'zvar':'Temperature','zbounds':None,'zlog':False,
-						 'model':'msis','run_model_on_refresh':True}	
+						 'model':'msis','run_model_on_refresh':True,'differencemode':False}	
 
 		#This will allow us to see what has changed between
 		#redraws/refreshes
@@ -511,9 +582,6 @@ class singleMplCanvas(FigureCanvas):
 		#Init the right-click menu
 		self.create_actions()
 		self.init_context_menu()
-
-
-
 
 	def changed(self,key):
 		"""Was a control described by key 'key' changed since last refresh?"""
@@ -532,63 +600,61 @@ class singleMplCanvas(FigureCanvas):
 		mpl.rcParams['font.size'] = fs
 
 	def reset(self):
-		"""Clears the data handler data and the click handler history"""
+		"""Clears the data handler data"""
 		self.pdh.clear_data()
-		
 
 	def prepare_model_run(self):
 		"""Determines which position variables (lat,lon, or alt) are constant,
 		given the current settings of the xvar, yvar and zvar. Then reads the 
 		approriate values and prepares either flattened gridded input for the 
 		ModelRunner or simple 1-d vectors if line plotting"""
-		#and should be determined by reading the state of the lineedit widgets
-
+	
 		#Begin by assigning all of the position variables their approprate output
-		#from the controls structure. Some of these values will be overwritten
+		#from the controls structure. These are all single (scalar) values set by
+		#the QLineEdit widgets for Lat, Lon and Alt.
+		#Everything is GEODETIC, not GEOCENTRIC, because that's what MSIS expects.
+		#Some of these values will be overwritten
 		#since at least one must be on a plot axes if line plot,
 		#or at least two if a colored plot (pcolor or contour)
 		self.mr.nextrun.vars['Latitude'] = self.controlstate['lat']
 		self.mr.nextrun.vars['Longitude'] = self.controlstate['lon']
 		self.mr.nextrun.vars['Altitude'] = self.controlstate['alt']
-		
-		#Now figure out what location variables are varying and which are now fixed
-		#(the fixed varibles will be read from the lineedit widgets)
-		for var,bnd,npt in (('xvar','xbounds','xnpts'),('yvar','ybounds','ynpts')):
-			for posvar in ('Latitude','Longitude','Altitude'):
-				#Now we figure out if x variable is Latitude, Longitude, or Altitude,
-				#and if it is, for example, Latitude, then we set the latitude for 
-				#the pending run to a vector defined by the xbounds, with number of points
-				#defined by the xnpts
-				if self.controlstate[var]==posvar:
-					bounds = self.controlstate[bnd]
-					numpts = self.controlstate[npt]
-					#Now assign the approriate position variable in the pending model run
-					self.mr.nextrun.vars[self.controlstate[var]] = numpy.linspace(bounds[0],bounds[1],numpts)
-					self.mr.nextrun.shape = (numpts,1) #The default output shape of a column vector
 
 		#Now we determine from the plottype if we need to grid x and y
-		#and reassign the vars in the next run corresponding to the xvar and yvar
-		#selection to the newly gridded data
-		#Also assign the shape of the expected model output
-		if self.pdh.plottypes[self.pdh.plottype]['gridxy']:
-			#Fault check
-			if self.controlstate['xvar'] not in self.mr.nextrun.vars:
+		
+		if self.plotProperty('gridxy'):
+			#Fault checks
+			if self.controlstate['xvar'] not in self.mr.nextrun.vars: #vars dict starts only with position and time
 				raise RuntimeError('xvar %s is not a valid position variable!' % (self.controlstate['xvar']))
+			else:
+				#self.mr.nextrun.lims[self.controlstate['xvar']] = self.controlstate['xbounds']
+				self.mr.nextrun.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
+				self.mr.nextrun.set_x(self.controlstate['xvar'])
+
 			if self.controlstate['yvar'] not in self.mr.nextrun.vars:
 				raise RuntimeError('yvar %s is not a valid position variable!' % (self.controlstate['yvar']))
-			#Make grids
-			x = self.mr.nextrun.vars[self.controlstate['xvar']] 
-			y = self.mr.nextrun.vars[self.controlstate['yvar']]
-			X,Y = numpy.meshgrid(x,y)
-			self.mr.nextrun.vars[self.controlstate['xvar']] = X  
-			self.mr.nextrun.vars[self.controlstate['yvar']] = Y
-			self.mr.nextrun.shape = X.shape #Set the shape, this overrides the default shape
+			else:
+				#self.mr.nextrun.lims[self.controlstate['yvar']] = self.controlstate['ybounds']
+				self.mr.nextrun.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
+				self.mr.nextrun.set_y(self.controlstate['yvar'])
+			
 		else: #We do not need to grid data
 			#Check that at least one selected variable is a location
-			if self.controlstate['xvar'] not in self.mr.nextrun.vars and self.controlstate['yvar'] not in self.mr.nextrun.vars:
+			if self.controlstate['xvar'] in self.mr.nextrun.vars:
+				#self.mr.nextrun.lims[self.controlstate['xvar']] = self.controlstate['xbounds']
+				self.mr.nextrun.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
+				self.mr.nextrun.set_x(self.controlstate['xvar'])
+				
+			elif self.controlstate['yvar'] in self.mr.nextrun.vars:
+				#self.mr.nextrun.lims[self.controlstate['yvar']] = self.controlstate['ybounds']
+				self.mr.nextrun.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
+				self.mr.nextrun.set_y(self.controlstate['yvar'])
+				
+			else:
 				raise RuntimeError('%s and %s are both not valid position variables!' % (self.controlstate['xvar'],self.controlstate['yvar']))
+			
 
-	@QtCore.pyqtSlot()
+	@pyqtSlot()
 	def refresh(self,force_full_refresh=False):
 		"""Redraws what is on the plot. Trigged on control change"""
 		ffr = force_full_refresh
@@ -608,54 +674,54 @@ class singleMplCanvas(FigureCanvas):
 
 		if self.changed('lat') or ffr:
 			if 'Latitude' not in [self.controlstate['xvar'],self.controlstate['yvar']]:
+				self.mr.nextrun.hold_constant('Latitude')
 				#We are holding latitude constant, so we will have to rerun the model
 				self.controlstate['run_model_on_refresh'] = True
 		
 		if self.changed('lon') or ffr:
 			if 'Longitude' not in [self.controlstate['xvar'],self.controlstate['yvar']]:
+				self.mr.nextrun.hold_constant('Longitude')
 				#We are holding longitude constant, so we will have to rerun the model
 				self.controlstate['run_model_on_refresh'] = True
 
 		if self.changed('alt') or ffr:
 			if 'Altitude' not in [self.controlstate['xvar'],self.controlstate['yvar']]:
+				self.mr.nextrun.hold_constant('Altitude')
 				#We are holding altitude constant, so we will have to rerun the model
 				self.controlstate['run_model_on_refresh'] = True
 		
+		if self.changed('differencemode'):
+			self.controlstate['run_model_on_refresh'] = True
+		
 		if self.controlstate['run_model_on_refresh'] or ffr:
 			self.prepare_model_run()
-			self.mr.nextrun() #Trigger next model run
+			self.mr.nextrun.populate() #Trigger next model run
 			self.mr() #Trigger storing just created model run as mr.runs[-1]
 			self.reset() #Reset the click handler and the plotDataHandler
-			#Update the variable bounds in the controlstate
-			if self.changed('xvar') or ffr:
-				self.controlstate['xbounds'] = self.mr.runs[-1].lims[self.controlstate['xvar']]
-			if self.changed('yvar') or ffr:
-				self.controlstate['ybounds'] = self.mr.runs[-1].lims[self.controlstate['yvar']]
-			if self.changed('zvar') or ffr:
-				self.controlstate['zbounds'] = self.mr.runs[-1].lims[self.controlstate['zvar']]
+			
+		#Always grab the most current data	
+		xdata,xlims = self.mr[self.controlstate['xvar']] #returns data,lims
+		ydata,ylims = self.mr[self.controlstate['yvar']] #returns data,lims
+		zdata,zlims = self.mr[self.controlstate['zvar']] #returns data,lims
+		
+		if self.controlstate['run_model_on_refresh'] or self.changed('differencemode') or ffr:
+			self.controlstate['xbounds'] = xlims
+			self.controlstate['ybounds'] = ylims
+			self.controlstate['zbounds'] = zlims
 
 		#Associate data in the data handler based on what variables are desired
 		if self.changed('xvar') or self.changed('xbounds') or self.changed('xlog') or self.controlstate['run_model_on_refresh'] or ffr: 
-			xdata = self.mr.runs[-1].vars[self.controlstate['xvar']]
 			xname = self.controlstate['xvar']
 			self.pdh.associate_data('x',xdata,xname,self.controlstate['xbounds'],self.controlstate['xlog'])
-			#if self.ch is not None:
-			#	self.ch.reset()
-		
+			
 		if self.changed('yvar') or self.changed('ybounds') or self.changed('ylog') or self.controlstate['run_model_on_refresh'] or ffr: 
-			ydata = self.mr.runs[-1].vars[self.controlstate['yvar']]
 			yname = self.controlstate['yvar']
 			self.pdh.associate_data('y',ydata,yname,self.controlstate['ybounds'],self.controlstate['ylog'])
-			#if self.ch is not None:
-			#	self.ch.reset()
-
+			
 		if self.changed('zvar') or self.changed('zbounds') or self.changed('zlog') or self.controlstate['run_model_on_refresh'] or ffr:
-			zdata = self.mr.runs[-1].vars[self.controlstate['zvar']]
 			zname = self.controlstate['zvar']
 			self.pdh.associate_data('z',zdata,zname,self.controlstate['zbounds'],self.controlstate['zlog'])
-			#if self.ch is not None:
-			#	self.ch.reset()
-
+			
 		#Referesh the plots
 		self.ax.cla()
 
@@ -663,6 +729,8 @@ class singleMplCanvas(FigureCanvas):
 
 		#Reset the last controlstate
 		self.last_controlstate = self.controlstate.copy() 
+
+		#Emit the signal to QT that the canvas has refreshed
 		self.canvasrefreshed.emit()
 
 		self.draw()
@@ -704,9 +772,15 @@ class singleMplCanvas(FigureCanvas):
 		self.actions['refresh'] = QtGui.QAction('&Refresh', self)
 		self.connect(self.actions['refresh'],SIGNAL("triggered()"),self,SLOT('refresh()'))
 
+		self.actions['statistics'] = QtGui.QAction('&Statistics', self)
+		self.connect(self.actions['statistics'],SIGNAL("triggered()"),self,SLOT('statisticsRequested()'))
+
+		self.actions['difference'] = QtGui.QAction('&Difference Mode', self)
+		self.actions['difference'].setCheckable(True)
+		self.connect(self.actions['difference'],SIGNAL("toggled(bool)"),self,SLOT('on_differencemodetoggled(bool)'))
 
 	#Event handlers
-	@QtCore.pyqtSlot('QPoint')
+	@pyqtSlot('QPoint')
 	def contextMenuRequested(self,point):
 		menu = QtGui.QMenu()
 		sublog = QtGui.QMenu('Log-scale')
@@ -730,12 +804,28 @@ class singleMplCanvas(FigureCanvas):
 		menu.addMenu(sublog)
 		menu.addMenu(sublim)
 		menu.addAction(self.actions['refresh'])
+		menu.addAction(self.actions['statistics'])
+		menu.addAction(self.actions['difference'])
 
 		# menu._exec is modal, menu.popup is not
 		# this means that menu.popup will not stop execution
 		menu.exec_(self.mapToGlobal(point))
 
-	@QtCore.pyqtSlot()
+	@pyqtSlot()
+	def statisticsRequested(self):
+		#for now, just display in the tbox
+		mystr = ''
+		for key in self.pdh.statistics:
+			mystr+='%s=%s\n' % (key,str(self.pdh.statistics[key]))
+		self.aw.tbox.setText(mystr)
+
+	@pyqtSlot(bool)
+	def on_differencemodetoggled(self,boo):
+		"""Catches signals from difference mode checkbox"""
+		self.mr.differencemode = boo
+		self.controlstate['differencemode']=boo
+
+	@pyqtSlot()
 	def on_boundstriggered(self,xyz):
 		"""Pop up a modal dialog to change the bounds"""
 		minflt,maxflt,result = BoundsDialog.getMinMax(initialbounds=self.controlstate[xyz+'bounds'])
@@ -750,20 +840,20 @@ class singleMplCanvas(FigureCanvas):
 			print "User canceled bounds change"
 		self.refresh()
 
-	@QtCore.pyqtSlot(bool)
+	@pyqtSlot(bool)
 	def on_logtoggled(self,boo,var):
 		"""Fancy multi-argument callback (use lambdas in the connect signal call)"""
 		print "%s log scale is %s" % (var,str(boo))
 		self.controlstate[var.lower()+'log'] = boo
 
-	@QtCore.pyqtSlot('QDateTime')
+	@pyqtSlot('QDateTime')
 	def on_datetimechange(self,qdt):
 		dt = qdt.toPyDateTime()
 		print "Date changed to %s" % (dt.strftime('%c'))
 		self.controlstate['datetime']=dt
 
 
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_xvarchange(self,new_value):
 		"""Handles user changing xvar combo box"""
 		new_value = str(new_value) #Make sure not QString
@@ -772,7 +862,7 @@ class singleMplCanvas(FigureCanvas):
 		self.controlstate['xbounds']=self.mr.runs[-1].lims[new_value]
 
 		
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_yvarchange(self,new_value):
 		"""Handles user changing yvar combo box"""
 		new_value = str(new_value) #Make sure not QString
@@ -781,7 +871,7 @@ class singleMplCanvas(FigureCanvas):
 		self.controlstate['ybounds']=self.mr.runs[-1].lims[new_value]
 		
 
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_zvarchange(self,new_value):
 		"""Handles user changing zvar combo box"""
 		new_value = str(new_value) #Make sure not QString
@@ -790,7 +880,7 @@ class singleMplCanvas(FigureCanvas):
 		self.controlstate['zbounds']=self.mr.runs[-1].lims[new_value]
 		
 
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_latlinechange(self,new_value):
 		"""Handles user changing single latitude lineedit widget"""
 		#Convert string to float
@@ -808,7 +898,7 @@ class singleMplCanvas(FigureCanvas):
 		self.controlstate['lat'] = new_lat
 		
 
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_lonlinechange(self,new_value):
 		"""Handles user changing single longitude lineedit widget"""
 		#Convert string to float
@@ -829,7 +919,7 @@ class singleMplCanvas(FigureCanvas):
 		self.controlstate['lon'] = new_lon
 		
 
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_altlinechange(self,new_value):
 		"""Handles user changing single altitude lineedit widget"""
 		#Convert string to float
@@ -847,7 +937,7 @@ class singleMplCanvas(FigureCanvas):
 		self.controlstate['alt'] = new_alt
 		
 
-	@QtCore.pyqtSlot(str)
+	@pyqtSlot(str)
 	def on_plottypechange(self,new_value):
 		#Sanitize input
 		new_value = str(new_value) #Make sure not QString
@@ -877,7 +967,7 @@ class auxCanvas(singleMplCanvas):
 
 class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 	import textwrap
-	@QtCore.pyqtSlot()
+	@pyqtSlot()
 	def update_controls(self):
 		"""Called when the main canvas refreses"""
 		print "update_controls called"
@@ -886,6 +976,7 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		ap = str(self.maincanv.mr.runs[-1].drivers['ap'][0])
 		self.tbox.setText('Activity From IRI Database:\n%s\nF-10.7:\n  %s\nF10.7 81-day Average:\n  %s\nAP:\n  %s' % (self.maincanv.controlstate['datetime'].strftime('%c'),
 			f107,f107a,ap))
+
 
 	def __init__(self):
 		QtGui.QMainWindow.__init__(self)
@@ -1084,6 +1175,8 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		self.auxcanv.refresh()
 
 	def canvas_clicked(self,event):
+		"""Event handler for an matplotlib event, instead of a QT event"""
+
 		#Ignore everything except left-clicks
 		if event.button!=1:
 			return
@@ -1166,7 +1259,7 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		self.comboZvar.setCurrentIndex(indZ)
 
 	def set_aux_comboboxes(self,controlstate):
-		#Init auxillary X and Y to be same as main Y and Z
+		"""Set the X and Y choosers (QComboBox) for the line plot by reading the controlstate"""
 		indX = self.comboXvaraux.findText(controlstate['xvar'])
 		indY = self.comboYvaraux.findText(controlstate['yvar'])
 		self.comboXvaraux.setCurrentIndex(indX)
@@ -1186,4 +1279,9 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 								For education use only. Written by Liam Kilcommons <liam.kilcommons@colorado.edu>
 			"""))
 
-
+if __name__== "__main__":
+	#Script execution
+	qApp = QtGui.QApplication(sys.argv)
+	aw = AtModExplorerApplicationWindow()
+	aw.show()
+	sys.exit(qApp.exec_())

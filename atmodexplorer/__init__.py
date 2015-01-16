@@ -12,3 +12,5 @@ def __init__():
 	aw = AtModExplorerApplicationWindow()
 	aw.show()
 	sys.exit(qApp.exec_())
+
+
