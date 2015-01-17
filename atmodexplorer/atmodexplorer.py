@@ -9,7 +9,7 @@ from PyQt4.QtCore import SIGNAL,SLOT,pyqtSlot,pyqtSignal
 
 #Main imports
 import numpy as np
-import numpy
+
 #import pandas as pd
 import sys, pdb
 import datetime
@@ -21,12 +21,18 @@ from matplotlib.backends.backend_qt4agg import NavigationToolbar2QT as Navigatio
 
 from matplotlib.figure import Figure
 import matplotlib as mpl
+
 from mpl_toolkits.basemap import Basemap
 from matplotlib import ticker
 from matplotlib.colors import LogNorm, Normalize
 import msispy
 from collections import OrderedDict
 
+def lim_pad(lims):
+	"""Adds a little extra to the limits to make plots more visible"""
+	delta = lims[1]-lims[0]
+	new_lims = (lims[0]-delta*.1,lims[1]+delta*.1)
+	return new_lims
 
 class ModelRun(object):
 	
@@ -62,7 +68,7 @@ class ModelRun(object):
 		self.lims = OrderedDict()
 		self.lims['Latitude']=[-90.,90.]
 		self.lims['Longitude']=[-180.,180.]
-		self.lims['Altitude']=[0.,1000.]
+		self.lims['Altitude']=[0.,400.]
 
 		self.shape = None #Tells how to produce gridded output, defaults (if None) to use column vectors
 		self.totalpts = None #Tells how many total points
@@ -107,10 +113,10 @@ class ModelRun(object):
 		#Populate the ephemeris variables as vectors
 		for var in ['Latitude','Longitude','Altitude']:
 			if self.npts[var]>1:
-					self.vars[var] = numpy.linspace(self.lims[var][0],self.lims[var][1],self.npts[var])
+					self.vars[var] = np.linspace(self.lims[var][0],self.lims[var][1],self.npts[var])
 			else:
 				if self.vars[var] is not None:
-					self.vars[var] = numpy.ones(self.shape)*self.vars[var]
+					self.vars[var] = np.ones(self.shape)*self.vars[var]
 				else:
 					raise RuntimeError('Set %s to something first if you want to hold it constant.' % (var))
 			
@@ -118,7 +124,7 @@ class ModelRun(object):
 		if nindependent>1:
 			x = self.vars[self.xkey]
 			y = self.vars[self.ykey]
-			X,Y = numpy.meshgrid(x,y)
+			X,Y = np.meshgrid(x,y)
 			self.vars[self.xkey] = X
 			self.vars[self.ykey] = Y
 
@@ -139,7 +145,8 @@ class ModelRun(object):
 				mydata,mylims = self.vars[key],self.lims[key]
 				peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
 				newdata = mydata-peerdata
-				newlims = (numpy.nanmin(newdata.flatten()),numpy.nanmax(newdata.flatten()))
+				newlims = (np.nanmin(newdata.flatten()),np.nanmax(newdata.flatten()))
+				newlims = lim_pad(newlims)
 				return newdata,newlims
 			else:
 				return self.vars[key],self.lims[key]
@@ -177,9 +184,10 @@ class MsisRun(ModelRun):
 			self.shape = (self.npts,1)
 			
 		for v in self.vars:
-			self.vars[v] = numpy.reshape(self.vars[v],self.shape)
+			self.vars[v] = np.reshape(self.vars[v],self.shape)
 			if v not in ['Latitude','Longitude','Altitude']:
-				self.lims[v] = [numpy.nanmin(self.vars[v].flatten()),numpy.nanmax(self.vars[v].flatten())]
+				self.lims[v] = lim_pad([np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())])
+
 			#print "lims for var %s = [%f,%f]" % (v,self.lims[v][0],self.lims[v][1])
 
 	
@@ -246,7 +254,7 @@ class ModelRunner(object):
 		
 
 class plotDataHandler(object):
-	def __init__(self,canvas,plottype='line',cscale='linear',mapproj='moll'):
+	def __init__(self,canvas,plottype='line',cscale='linear',mapproj='mill'):
 		"""
 		Takes a singleMplCanvas instance to associate with
 		and plot on
@@ -256,12 +264,14 @@ class plotDataHandler(object):
 		self.ax = canvas.ax
 		self.axpos = canvas.ax.get_position()
 		pts = self.axpos.get_points().flatten() # Get the extent of the bounding box for the canvas axes
-		self.cbpos = [.1,pts[1]-.15,.8,.1]
+		self.cbpos = None
 		self.cb = None
+		self.map_lw=.5 #Map linewidth
 		self.map = None #Place holder for map instance if we're plotting a map
 		#The idea is to have all plot settings described in this class,
 		#so that if we want to add a new plot type, we only need to modify 
 		#this class
+		self.supported_projections={'mill':'Miller Cylindrical','moll':'Mollweide','ortho':'Orthographic'}
 		self.plottypes = dict()
 		self.plottypes['line'] = {'gridxy':False}
 		self.plottypes['pcolor'] = {'gridxy':True}
@@ -277,7 +287,7 @@ class plotDataHandler(object):
 		self.clear_data()
 
 	def clear_data(self):
-		self.x,self.y,self.z = None,None,None #must be numpy.array
+		self.x,self.y,self.z = None,None,None #must be np.array
 		self.xname,self.yname,self.zname = None,None,None #must be string
 		self.xbounds,self.ybounds,self.zbounds = None,None,None #must be 2 element tuple
 		self.xlog, self.ylog, self.zlog = False, False, False
@@ -326,16 +336,16 @@ class plotDataHandler(object):
 	def compute_statistics(self):
 		self.statistics = OrderedDict()
 		if self.plottype=='line':
-			self.statistics['Mean-%s'%(self.xname)]=numpy.nanmean(self.x)
-			self.statistics['Mean-%s'%(self.yname)]=numpy.nanmean(self.y)
-			self.statistics['Median-%s'%(self.xname)]=numpy.median(self.x)
-			self.statistics['Median-%s'%(self.yname)]=numpy.median(self.y)
-			self.statistics['StDev-%s'%(self.xname)]=numpy.nanstd(self.x)
-			self.statistics['StDev-%s'%(self.yname)]=numpy.nanstd(self.y)
+			self.statistics['Mean-%s'%(self.xname)]=np.nanmean(self.x)
+			self.statistics['Mean-%s'%(self.yname)]=np.nanmean(self.y)
+			self.statistics['Median-%s'%(self.xname)]=np.median(self.x)
+			self.statistics['Median-%s'%(self.yname)]=np.median(self.y)
+			self.statistics['StDev-%s'%(self.xname)]=np.nanstd(self.x)
+			self.statistics['StDev-%s'%(self.yname)]=np.nanstd(self.y)
 		elif self.plottype=='map' or self.plottypes=='pcolor':
-			self.statistics['Mean-%s'%(self.zname)]=numpy.nanmean(self.z)
-			self.statistics['Median-%s'%(self.zname)]=numpy.median(self.z)
-			self.statistics['StDev-%s'%(self.zname)]=numpy.nanstd(self.z)
+			self.statistics['Mean-%s'%(self.zname)]=np.nanmean(self.z)
+			self.statistics['Median-%s'%(self.zname)]=np.median(self.z)
+			self.statistics['StDev-%s'%(self.zname)]=np.nanstd(self.z)
 			if self.plottype=='map':
 				self.statistics['Geo-Integrated-%s'%(self.zname)]=self.integrate_z()
 	
@@ -347,13 +357,13 @@ class plotDataHandler(object):
 		elif self.yname=='Longitude':
 			lon=self.y.flatten()
 		else:
-			return numpy.nan
+			return np.nan
 		if self.xname=='Latitude':
 			lat=self.x.flatten()
 		elif self.yname=='Latitude':
 			lat=self.y.flatten()
 		else:
-			return numpy.nan
+			return np.nan
 		#a little hack to get the altitude
 		alt = self.canvas.controlstate['alt']
 		r_km = 6371.2+alt
@@ -361,27 +371,43 @@ class plotDataHandler(object):
 		zee = self.z.flatten()
 		zint = 0.
 		for k in xrange(len(lat)-1):
-			theta1 = (90.-lat[k])/180.*numpy.pi
-			theta2 = (90.-lat[k+1])/180.*numpy.pi
-			dphi = (lon[k+1]-lon[k])/180.*numpy.pi
-			zint +=  (zee[k]+zee[k+1])/2.*numpy.abs(r_km**2*dphi*(numpy.cos(theta1)-numpy.cos(theta2)))#area element
+			theta1 = (90.-lat[k])/180.*np.pi
+			theta2 = (90.-lat[k+1])/180.*np.pi
+			dphi = (lon[k+1]-lon[k])/180.*np.pi
+			zint +=  (zee[k]+zee[k+1])/2.*np.abs(r_km**2*dphi*(np.cos(theta1)-np.cos(theta2)))#area element
 		return zint
 
 	def plot(self,*args,**kwargs):
 		
+		if self.map is not None:
+			self.map = None #Make sure that we don't leave any maps lying around if we're not plotting maps
+		
+		#print "self.ax: %s\n" % (str(self.ax.get_position()))
+
+		#print "All axes: \n" 
+		#for i,a in enumerate(self.fig.axes):
+		#	print "%d: %s" % (i,str(a.get_position()))
+		
 		if self.statistics is None:
 			self.compute_statistics()
 
+		if self.cb is not None:
+			print "removing self.cb:%s\n" % (str(self.cb.ax.get_position()))
+			self.cb.remove()
+			self.cb = None
+
+
 		self.ax.cla()
-		self.ax.set_adjustable('datalim')
-		self.map = None #Make sure that we don't leave any maps lying around if we're not plotting maps
+		#self.ax.set_adjustable('datalim')
+
 		
-		#self.zbounds = (numpy.nanmin(self.z),numpy.nanmax(self.z))
+		#self.zbounds = (np.nanmin(self.z),np.nanmax(self.z))
 		
 		if self.zlog:
-			self.z[self.z<=0.] = numpy.nan
+			self.z[self.z<=0.] = np.nan
 			norm = LogNorm(vmin=self.zbounds[0],vmax=self.zbounds[1]) 
 			locator = ticker.LogLocator()
+			formatter = ticker.LogFormatter(10, labelOnlyBase=False) 
 		else:
 			norm = Normalize(vmin=self.zbounds[0],vmax=self.zbounds[1])
 	
@@ -397,11 +423,14 @@ class plotDataHandler(object):
 			self.ax.set_xlim(self.xbounds)
 			if self.xlog:
 				self.ax.set_xscale('log',nonposx='clip')
+				self.ax.get_xaxis().get_major_formatter().labelOnlyBase = False
 				#self.ax.set_xlim(0,np.log(self.xbounds[1]))
 			self.ax.set_ylabel(self.yname)
 			self.ax.set_ylim(self.ybounds)
 			if self.ylog:
 				self.ax.set_yscale('log',nonposx='clip')
+				self.ax.get_yaxis().get_major_formatter().labelOnlyBase = False
+				
 				#self.ax.set_ylim(0,np.log(self.ybounds[1]))
 			self.ax.set_title('%s vs. %s' % (self.xname,self.yname))
 			if not self.xlog and not self.ylog:
@@ -413,6 +442,7 @@ class plotDataHandler(object):
 		
 		elif self.plottype == 'pcolor':
 
+			
 			mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
 			#m.draw()
 
@@ -425,34 +455,38 @@ class plotDataHandler(object):
 			self.ax.set_ylim(self.ybounds)
 			if self.ylog:
 				self.ax.set_xscale('log',nonposx='clip')
-			
-			self.ax.xaxis.tick_top()
 
-			if self.cb is None:
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
+			if self.zlog:
+				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter)
 			else:
-				self.cb.remove()
 				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
-			self.ax.set_position(self.axpos)
-			self.cb.ax.set_position(self.cbpos)
+
+			#self.ax.set_position(self.axpos)
+			#self.cb.ax.set_position(self.cbpos)
+			self.cb.ax.set_position([.1,0,.8,.15])
+			self.ax.set_position([.1,.25,.8,.7])
 
 			self.cb.set_label(self.zname)
 			self.ax.set_aspect(1./self.ax.get_data_ratio())
 			self.fig.suptitle('%s vs. %s (color:%s)' % (self.xname,self.yname,self.zname))
-			#try:
-			#	self.fig.tight_layout() #Makes sure all labels are visible
-			#except:
-			#	print "Tight layout for pcolor failed"
-
+			
 		elif self.plottype == 'map':
 			if self.mapproj=='moll':
 				m = Basemap(projection=self.mapproj,llcrnrlat=self.ybounds[0],urcrnrlat=self.ybounds[1],\
 					llcrnrlon=self.xbounds[0],urcrnrlon=self.xbounds[1],lat_ts=20,resolution='c',ax=self.ax,lon_0=0.)
-			m.drawcoastlines()
+			elif self.mapproj=='mill':
+				m = Basemap(projection=self.mapproj,llcrnrlat=int(self.ybounds[0]),urcrnrlat=int(self.ybounds[1]),\
+					llcrnrlon=int(self.xbounds[0]),urcrnrlon=int(self.xbounds[1]),lat_ts=20,resolution='c',ax=self.ax)
+			elif self.mapproj=='ortho':
+				m = Basemap(projection='ortho',ax=self.ax,lat_0=int(self.canvas.controlstate['lat']),lon_0=int(self.canvas.controlstate['lon']),resolution='l')
+			
+			m.drawcoastlines(linewidth=self.map_lw)
+
 			#m.fillcontinents(color='coral',lake_color='aqua')
+			
 			# draw parallels and meridians.
-			m.drawparallels(numpy.arange(-90.,91.,15.))
-			m.drawmeridians(numpy.arange(-180.,181.,30.))
+			m.drawparallels(np.arange(-90.,91.,15.),linewidth=self.map_lw)
+			m.drawmeridians(np.arange(-180.,181.,30.),linewidth=self.map_lw)
 			if self.zlog:
 				mappable = m.contour(self.x,self.y,self.z,15,linewidths=1.5,latlon=True,norm=norm,
 					vmin=self.zbounds[0],vmax=self.zbounds[1],locator=locator,**kwargs)
@@ -460,30 +494,34 @@ class plotDataHandler(object):
 				mappable = m.contour(self.x,self.y,self.z,15,linewidths=1.5,latlon=True,norm=norm,
 					vmin=self.zbounds[0],vmax=self.zbounds[1],**kwargs)
 				
-			#mappable = m.pcolormesh(self.x,self.y,self.z,norm=norm,**kwargs)
-			self.ax.xaxis.tick_top()
+			
 			latbounds = [self.ybounds[0],self.ybounds[1]]
 			lonbounds = [self.xbounds[0],self.xbounds[1]]
 
 			lonbounds[0],latbounds[0] = m(lonbounds[0],latbounds[0])
 			lonbounds[1],latbounds[1] = m(lonbounds[1],latbounds[1])
 
-			self.ax.set_ylim(latbounds)
-			self.ax.set_xlim(lonbounds)
+			#self.ax.set_ylim(latbounds)
+			#self.ax.set_xlim(lonbounds)
 
 			#m.draw()
-			if self.cb is None:
-				self.ax.set_position(self.axpos)
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
-			else:
-				self.cb.remove()
-				self.ax.set_position(self.axpos)
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
-			#self.cb.ax.set_position(self.cbpos)
-			self.cb.set_label(self.zname)
-			self.fig.suptitle('%s projection map of %s' % (self.mapproj,self.zname))
-			self.map = m
 
+
+			if self.zlog:
+				self.cb = self.fig.colorbar(mappable,ax=self.ax,location='horizontal',format=formatter)
+			else:
+				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
+
+			#m.set_axes_limits(ax=self.canvas.ax)
+			
+			self.cb.ax.set_position([.1,.05,.8,.15])
+			self.ax.set_position([.1,.3,.8,.8])
+
+			self.cb.set_label(self.zname)
+			self.fig.suptitle('%s Projection Map of %s' % (self.supported_projections[self.mapproj],self.zname))
+			self.map = m
+		#Now call the canvas cosmetic adjustment routine
+		self.canvas.apply_lipstick()
 
 class BoundsDialog(QtGui.QDialog):
 	"""A 2 field dialog box for changing axes boundaries"""
@@ -553,7 +591,7 @@ class singleMplCanvas(FigureCanvas):
 		self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
 		self.set_mplparams()
-		self.ax = self.fig.add_axes([0.1,.3,.8,.6])
+		self.ax = self.fig.add_subplot(111)
 		#Create a data handler and a click handler
 		self.pdh = plotDataHandler(self)
 		
@@ -595,7 +633,7 @@ class singleMplCanvas(FigureCanvas):
 		"""Sets default visual appearance of the axes"""
 		fs = 5
 		ms = 3
-		mpl.rcParams['lines.linewidth'] = .6
+		mpl.rcParams['lines.linewidth'] = .5
 		mpl.rcParams['lines.markersize'] = ms
 		mpl.rcParams['font.size'] = fs
 
@@ -950,21 +988,93 @@ class mainCanvas(singleMplCanvas):
 	"""The main canvas for plotting the main visualization"""
 	def __init__(self, *args, **kwargs):
 		singleMplCanvas.__init__(self, *args, **kwargs)
+		#self.ax.set_position([0.1,.3,.7,.5])
 		self.refresh(force_full_refresh=True) #This will set everything up to plot as per current controlstate
 		
-	def update_figure(self):
-		pass
-	
+	def apply_lipstick(self):
+		"""Called on each replot, allows cosmetic adjustment"""
+		#self.fig.subplots_adjust(left=0.05,bottom=0.05,top=.95,right=.95)
+		fs = 5
+		w = .5
+		lw = .3
+		lp = 0
+		pd = .5
+		if self.pdh.plottype=='pcolor':
+			
+
+			mpl.artist.setp(self.ax.get_xmajorticklabels(),size=fs,rotation=30)
+			mpl.artist.setp(self.ax.get_ymajorticklabels(),size=fs)
+			
+			#Label is a text object
+			self.ax.xaxis.label.set_fontsize(fs)
+			self.ax.yaxis.label.set_fontsize(fs)
+			self.ax.xaxis.labelpad=lp
+			self.ax.yaxis.labelpad=lp
+			
+			self.ax.title.set_fontsize(fs)
+			self.ax.title.set_fontweight('bold')
+			
+			#Adjust tick size
+			self.ax.xaxis.set_tick_params(width=w,pad=pd)
+			self.ax.yaxis.set_tick_params(width=w,pad=pd)
+
+			#Colorbar Ticks
+			self.pdh.cb.ax.xaxis.set_tick_params(width=w,pad=pd+.5)
+			self.pdh.cb.ax.yaxis.set_tick_params(width=w,pad=pd+.5)
+			self.pdh.cb.outline.set_linewidth(w)
+
+			self.ax.grid(True,linewidth=.1)
+			#Adjust axes border size
+			for axis in ['top','bottom','left','right']:
+	  			self.ax.spines[axis].set_linewidth(lw)
+	  			#self.pdh.cb.spines[axis].set_linewidth(lw)
+	  				
+		elif self.pdh.plottype=='map':
+			#Colorbar Ticks
+			self.pdh.cb.ax.xaxis.set_tick_params(width=w,pad=pd+.5)
+			self.pdh.cb.ax.yaxis.set_tick_params(width=w,pad=pd+.5)
+			self.pdh.cb.outline.set_linewidth(w)
+						#Adjust axes border size
+			for axis in ['top','bottom','left','right']:
+	  			self.ax.spines[axis].set_linewidth(lw)
+	  			#self.pdh.cb.spines[axis].set_linewidth(lw)
+
 class auxCanvas(singleMplCanvas):
 	"""The secondary canvas that floats above the controls"""
 	def __init__(self, *args, **kwargs):
 		singleMplCanvas.__init__(self, *args, **kwargs)
+		#self.ax.set_position([0.25,0.15,0.7,0.7])
 		self.controlstate['plottype']='line'
 		self.refresh(force_full_refresh=True) #This will set everything up to plot as per current controlstate
 		
-	def update_figure(self):
-		pass
+	def apply_lipstick(self):
+		"""Called on each replot, allows cosmetic adjustment"""
+		self.fig.subplots_adjust(left=.15,bottom=.15)
+		fs = 4
+		w = .5
+		lw = .5
+		lp = 0
+		pd = .5
 
+		mpl.artist.setp(self.ax.get_xmajorticklabels(),size=fs,rotation=30)
+		mpl.artist.setp(self.ax.get_ymajorticklabels(),size=fs)
+		
+		#Label is a text object
+		self.ax.xaxis.label.set_fontsize(fs)
+		self.ax.yaxis.label.set_fontsize(fs)
+		self.ax.xaxis.labelpad=lp
+		self.ax.yaxis.labelpad=lp
+		
+		self.ax.title.set_fontsize(fs+1)
+
+		#Adjust tick size
+		self.ax.xaxis.set_tick_params(width=w,pad=pd)
+		self.ax.yaxis.set_tick_params(width=w,pad=pd)
+		#Adjust axes border size
+		for axis in ['top','bottom','left','right']:
+  			self.ax.spines[axis].set_linewidth(lw)
+		#self.figure.tight_layout()
+		
 class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 	import textwrap
 	@pyqtSlot()
@@ -1183,8 +1293,11 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 
 		ax = event.inaxes #Which axes the click occured in
 		if self.last_click is not None:
-			for ln in self.last_click:
-				ln.set_visible(False)
+			for click in self.last_click:
+				for ln in click:
+					ln.set_visible(False)
+		else:
+			self.last_click = []
 
 		if ax is not None: #If the click occured in a axes
 			canv = ax.figure.canvas
@@ -1209,24 +1322,70 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 			
 			clx = xdata[ind]#Closest datapoint x coordinate 
 			cly = ydata[ind]#Closest datapoint y coordinate 
+			clz = zdata[ind]#Closest datapoint z coordinate
 				
 			if canv.controlstate['plottype']=='map': 
 				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
 				#Add the plotted line to the clicked list
-				self.last_click = canv.pdh.map.plot(clx,cly,'mo',alpha=.8,latlon=True)
-				self.auxcanv.controlstate['lat']=numpy.floor(clx)
-				self.auxcanv.controlstate['lon']=numpy.floor(cly)
-				self.auxcanv.controlstate['xvar']='Altitude'
-				self.auxcanv.controlstate['yvar']=self.maincanv.controlstate['zvar']
+				self.last_click.append(canv.pdh.map.plot(clx,cly,'rx',markersize=5,latlon=True))
+				self.auxcanv.controlstate['lat']=clx
+				self.auxcanv.controlstate['lon']=cly
+				self.auxcanv.controlstate['yvar']='Altitude'
+				self.auxcanv.controlstate['xvar']=self.maincanv.controlstate['zvar']
+				self.auxcanv.controlstate['alt']=self.maincanv.controlstate['alt']
+				self.set_locations(self.auxcanv.controlstate)
+				self.set_aux_comboboxes(self.auxcanv.controlstate)
+				self.auxcanv.refresh()
+				self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='r'))
+			elif canv.controlstate['plottype']=='pcolor':
+				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
+				#Add the plotted line to the clicked list
+				self.last_click.append(ax.plot(clx,cly,'rx',markersize=5))
+				#Decide which position axes is not represented in pcolor and plot that axes versus 
+				#color variable on the auxillary canvas
+				for var in ['Latitude','Longitude','Altitude']:
+					if self.maincanv.controlstate['xvar']!=var and self.maincanv.controlstate['yvar']!=var:
+						if var == 'Altitude':
+							self.auxcanv.controlstate['yvar']=var
+							self.auxcanv.controlstate['xvar']=self.maincanv.controlstate['zvar']
+							self.auxcanv.controlstate['lat']=clx
+							self.auxcanv.controlstate['lon']=cly
+						elif var == 'Latitude':
+							self.auxcanv.controlstate['xvar']='Latitude'
+							self.auxcanv.controlstate['lat']=self.maincanv.controlstate['lat']
+							self.auxcanv.controlstate['yvar']=self.maincanv.controlstate['zvar']
+							if self.maincanv.controlstate['xvar']=='Longitude':
+								self.auxcanv.controlstate['lon']=clx
+								self.auxcanv.controlstate['alt']=cly
+							else: #xvar must be altitude
+								self.auxcanv.controlstate['lon']=cly
+								self.auxcanv.controlstate['alt']=clx
+						elif var == 'Longitude':
+							self.auxcanv.controlstate['xvar']='Longitude'
+							self.auxcanv.controlstate['lon']=self.maincanv.controlstate['lon']
+							self.auxcanv.controlstate['yvar']=self.maincanv.controlstate['zvar']
+							if self.maincanv.controlstate['xvar']=='Latitude':
+								self.auxcanv.controlstate['lat']=clx
+								self.auxcanv.controlstate['alt']=cly
+							else: #xvar must be altitude
+								self.auxcanv.controlstate['lat']=cly
+								self.auxcanv.controlstate['alt']=clx
 				self.set_locations(self.auxcanv.controlstate)
 				self.set_aux_comboboxes(self.auxcanv.controlstate)
 				self.auxcanv.refresh()
 
+				if self.auxcanv.controlstate['yvar']=='Altitude':
+					self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='r'))
+				elif self.auxcanv.controlstate['xvar']=='Latitude':
+					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lat'],linestyle=':',linewidth=.5,color='r'))
+				elif self.auxcanv.controlstate['xvar']=='Longitude':
+					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lon'],linestyle=':',linewidth=.5,color='r'))
+
+					
 			else:
-				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
-				#Add the plotted line to the clicked list
-				self.last_click = ax.plot(clx,cly,'mo',alpha=.8)
-			
+				self.last_click.append(ax.plot(clx,cly,'rx',markersize=5))
+				
+				
 			if canv.pdh.plottypes[canv.pdh.plottype]['gridxy']:
 				clz = zdata[ind]#Closest datapoint z coordinate 
 				#Show a message for each click in the app status bar
@@ -1237,17 +1396,18 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 			else:
 				self.statusBar().showMessage("%s:%f, %s:%f" % (canv.controlstate['xvar'],clx,
 															   canv.controlstate['yvar'],cly), 2000)
-				clz = numpy.nan
+				clz = np.nan
 				
 			#Redraw
-			canv.draw()
+			self.maincanv.draw()
+			self.auxcanv.draw()
 			
 
 	def set_locations(self,controlstate):
 		"""Sets all location controls to match the controlstate"""
-		self.qlelat.setText(str(controlstate['lat']))
-		self.qlelon.setText(str(controlstate['lon']))
-		self.qlealt.setText(str(controlstate['alt']))
+		self.qlelat.setText('%.2f' % (controlstate['lat']))
+		self.qlelon.setText('%.2f' % (controlstate['lon']))
+		self.qlealt.setText('%.2f' % (controlstate['alt']))
 
 	def set_comboboxes(self,controlstate):
 		"""Sets the X, Y, and Z Variable Choosers By reading a canvas controlstate dict"""
