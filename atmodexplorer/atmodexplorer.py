@@ -27,6 +27,8 @@ from matplotlib import ticker
 from matplotlib.colors import LogNorm, Normalize
 import msispy
 from collections import OrderedDict
+import logging
+logging.basicConfig(level=logging.INFO)
 
 def lim_pad(lims):
 	"""Adds a little extra to the limits to make plots more visible"""
@@ -140,7 +142,7 @@ class ModelRun(object):
 			return self.vars[key],self.lims[key]
 		else:
 			if key not in ['Latitude','Longitude','Altitude']:
-				print "Entering difference mode for var %s" % (key)
+				logging.info( "Entering difference mode for var %s" % (key))
 				#Doesn't make sense to difference locations
 				mydata,mylims = self.vars[key],self.lims[key]
 				peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
@@ -166,7 +168,7 @@ class MsisRun(ModelRun):
 
 		super(MsisRun,self).populate()
 		
-		print "Now runing NRLMSISE00 for %s...\n" % (self.dt.strftime('%c'))
+		logging.info( "Now runing NRLMSISE00 for %s...\n" % (self.dt.strftime('%c')))
 		
 		self.species,self.t_exo,self.t_alt,self.drivers = msispy.msis(self.dt,self.flatlat,self.flatlon,self.flatalt)
 		
@@ -223,10 +225,10 @@ class ModelRunner(object):
 				run.peer = None
 
 		self.n_total_runs+=1
-		print "Model run number %d added." % (self.n_total_runs)
+		logging.info( "Model run number %d added." % (self.n_total_runs))
 		if len(self.runs)>self.n_max_runs:
 			del self.runs[0]
-			print "Exceeded total number of stored runs %d. Run %d removed" %(self.n_max_runs,self.n_total_runs-self.n_max_runs)
+			logging.info( "Exceeded total number of stored runs %d. Run %d removed" %(self.n_max_runs,self.n_total_runs-self.n_max_runs))
 
 	#Implement a simple interface for retrieving data, which is opaque to whether or now we're differencing
 	#or which model we're using
@@ -245,7 +247,7 @@ class ModelRunner(object):
 
 	@differencemode.setter
 	def differencemode(self, boo):
-		print "Difference mode is now %s" % (str(boo))
+		logging.info( "Difference mode is now %s" % (str(boo)))
 		if boo:
 			self.nextrun.peer = self.runs[-1]
 		else:
@@ -350,7 +352,7 @@ class plotDataHandler(object):
 				self.statistics['Geo-Integrated-%s'%(self.zname)]=self.integrate_z()
 	
 	def integrate_z(self):
-		#If x and y and longitude and latitude
+		#If x and y are longitude and latitude
 		#integrates z over the grid
 		if self.xname=='Longitude':
 			lon=self.x.flatten()
@@ -392,7 +394,7 @@ class plotDataHandler(object):
 			self.compute_statistics()
 
 		if self.cb is not None:
-			print "removing self.cb:%s\n" % (str(self.cb.ax.get_position()))
+			#logging.info("removing self.cb:%s\n" % (str(self.cb.ax.get_position())))
 			self.cb.remove()
 			self.cb = None
 
@@ -472,8 +474,8 @@ class plotDataHandler(object):
 			
 		elif self.plottype == 'map':
 			if self.mapproj=='moll':
-				m = Basemap(projection=self.mapproj,llcrnrlat=self.ybounds[0],urcrnrlat=self.ybounds[1],\
-					llcrnrlon=self.xbounds[0],urcrnrlon=self.xbounds[1],lat_ts=20,resolution='c',ax=self.ax,lon_0=0.)
+				m = Basemap(projection=self.mapproj,llcrnrlat=int(self.ybounds[0]),urcrnrlat=int(self.ybounds[1]),\
+					llcrnrlon=int(self.xbounds[0]),urcrnrlon=int(self.xbounds[1]),lat_ts=20,resolution='c',ax=self.ax,lon_0=0.)
 			elif self.mapproj=='mill':
 				m = Basemap(projection=self.mapproj,llcrnrlat=int(self.ybounds[0]),urcrnrlat=int(self.ybounds[1]),\
 					llcrnrlon=int(self.xbounds[0]),urcrnrlon=int(self.xbounds[1]),lat_ts=20,resolution='c',ax=self.ax)
@@ -514,6 +516,9 @@ class plotDataHandler(object):
 
 			#m.set_axes_limits(ax=self.canvas.ax)
 			
+			self.ax.set_xlim(lonbounds)
+			self.ax.set_ylim(latbounds)
+
 			self.cb.ax.set_position([.1,.05,.8,.15])
 			self.ax.set_position([.1,.3,.8,.8])
 
@@ -742,7 +747,8 @@ class singleMplCanvas(FigureCanvas):
 		ydata,ylims = self.mr[self.controlstate['yvar']] #returns data,lims
 		zdata,zlims = self.mr[self.controlstate['zvar']] #returns data,lims
 		
-		if self.controlstate['run_model_on_refresh'] or self.changed('differencemode') or ffr:
+		#Reset the bounds if we have changed any variables or switched on or off of difference mode
+		if self.changed('xvar') or self.changed('yvar') or self.changed('zvar') or self.changed('differencemode') or ffr:
 			self.controlstate['xbounds'] = xlims
 			self.controlstate['ybounds'] = ylims
 			self.controlstate['zbounds'] = zlims
@@ -808,7 +814,7 @@ class singleMplCanvas(FigureCanvas):
 						lambda xyz=var: self.on_boundstriggered(xyz))
 		
 		self.actions['refresh'] = QtGui.QAction('&Refresh', self)
-		self.connect(self.actions['refresh'],SIGNAL("triggered()"),self,SLOT('refresh()'))
+		self.connect(self.actions['refresh'],SIGNAL("triggered()"),lambda tf=True: self.refresh(force_full_refresh=tf))
 
 		self.actions['statistics'] = QtGui.QAction('&Statistics', self)
 		self.connect(self.actions['statistics'],SIGNAL("triggered()"),self,SLOT('statisticsRequested()'))
@@ -854,7 +860,14 @@ class singleMplCanvas(FigureCanvas):
 		#for now, just display in the tbox
 		mystr = ''
 		for key in self.pdh.statistics:
-			mystr+='%s=%s\n' % (key,str(self.pdh.statistics[key]))
+			try:
+				if self.pdh.statistics[key] < 10000. and self.pdh.statistics[key]>.0001:
+					mystr+='%s:%.3f\n' % (key,self.pdh.statistics[key])
+				else:
+					mystr+='%s:%.3e\n' % (key,self.pdh.statistics[key])
+			except:
+				mystr+='%s:%s\n' % (key,repr(self.pdh.statistics[key]))
+
 		self.aw.tbox.setText(mystr)
 
 	@pyqtSlot(bool)
@@ -869,25 +882,25 @@ class singleMplCanvas(FigureCanvas):
 		minflt,maxflt,result = BoundsDialog.getMinMax(initialbounds=self.controlstate[xyz+'bounds'])
 		if result:
 			if maxflt>minflt:
-				print "Changing %s bounds to %.3f %.3f" % (xyz,minflt,maxflt)
+				logging.info( "Changing %s bounds to %.3f %.3f" % (xyz,minflt,maxflt))
 				self.controlstate[xyz+'bounds']=(minflt,maxflt)
-				print str(self.controlstate[xyz+'bounds'])
+				logging.info( str(self.controlstate[xyz+'bounds']))
 			else:
-				print "Bad range!"
+				logging.warn( "Bad range!")
 		else:
-			print "User canceled bounds change"
+			logging.info( "User canceled bounds change" )
 		self.refresh()
 
 	@pyqtSlot(bool)
 	def on_logtoggled(self,boo,var):
 		"""Fancy multi-argument callback (use lambdas in the connect signal call)"""
-		print "%s log scale is %s" % (var,str(boo))
+		logging.info( "%s log scale is %s" % (var,str(boo)))
 		self.controlstate[var.lower()+'log'] = boo
 
 	@pyqtSlot('QDateTime')
 	def on_datetimechange(self,qdt):
 		dt = qdt.toPyDateTime()
-		print "Date changed to %s" % (dt.strftime('%c'))
+		logging.info( "Date changed to %s" % (dt.strftime('%c')))
 		self.controlstate['datetime']=dt
 
 
@@ -895,7 +908,7 @@ class singleMplCanvas(FigureCanvas):
 	def on_xvarchange(self,new_value):
 		"""Handles user changing xvar combo box"""
 		new_value = str(new_value) #Make sure not QString
-		print "X data set in singleMplCanvas to %s" % (new_value)
+		logging.info( "X data set in singleMplCanvas to %s" % (new_value))
 		self.controlstate['xvar']=new_value
 		self.controlstate['xbounds']=self.mr.runs[-1].lims[new_value]
 
@@ -904,7 +917,7 @@ class singleMplCanvas(FigureCanvas):
 	def on_yvarchange(self,new_value):
 		"""Handles user changing yvar combo box"""
 		new_value = str(new_value) #Make sure not QString
-		print "Y data set in singleMplCanvas to %s" % (new_value)
+		logging.info( "Y data set in singleMplCanvas to %s" % (new_value))
 		self.controlstate['yvar']=new_value
 		self.controlstate['ybounds']=self.mr.runs[-1].lims[new_value]
 		
@@ -913,7 +926,7 @@ class singleMplCanvas(FigureCanvas):
 	def on_zvarchange(self,new_value):
 		"""Handles user changing zvar combo box"""
 		new_value = str(new_value) #Make sure not QString
-		print "Z data set in singleMplCanvas to %s" % (new_value)
+		logging.info( "Z data set in singleMplCanvas to %s" % (new_value))
 		self.controlstate['zvar']=new_value
 		self.controlstate['zbounds']=self.mr.runs[-1].lims[new_value]
 		
@@ -926,13 +939,13 @@ class singleMplCanvas(FigureCanvas):
 		try:
 			new_lat = float(new_value)
 		except:
-			print "Unable to convert entered value %s for latitude to float!" %(new_value)
+			logging.warn( "Unable to convert entered value %s for latitude to float!" %(new_value))
 			return
 		#Range check
 		if new_lat < -90. or new_lat > 90.:
-			print "Invalid value for latitude %f" % (new_lat)
+			logging.info( "Invalid value for latitude %f" % (new_lat))
 			return
-		print "Single latitude changed to %f" %(new_lat)
+		logging.info( "Single latitude changed to %f" %(new_lat))
 		self.controlstate['lat'] = new_lat
 		
 
@@ -944,16 +957,16 @@ class singleMplCanvas(FigureCanvas):
 		try:
 			new_lon = float(new_value)
 		except:
-			print "Unable to convert entered value %s for longitude to float!" %(new_value)
+			logging.warn( "Unable to convert entered value %s for longitude to float!" %(new_value))
 			return
 		#Range check
 		if new_lon > 180.:
 			new_lon = new_lon - 360.
 		#And again
 		if new_lon < -180. or new_lon > 180.:
-			print "Invalid value for longitude %f" % (new_lon)
+			logging.warn( "Invalid value for longitude %f" % (new_lon))
 			return
-		print "Single longitude changed to %f" %(new_lon)
+		logging.info( "Single longitude changed to %f" %(new_lon))
 		self.controlstate['lon'] = new_lon
 		
 
@@ -965,13 +978,13 @@ class singleMplCanvas(FigureCanvas):
 		try:
 			new_alt = float(new_value)
 		except:
-			print "Unable to convert entered value %s for altitude to float!" %(new_value)
+			logging.warn( "Unable to convert entered value %s for altitude to float!" %(new_value))
 			return
 		#Range check
 		if new_alt < 0.:
-			print "Invalid value for altitude %f" % (new_alt)
+			logging.warn( "Invalid value for altitude %f" % (new_alt))
 			return
-		print "Single altitude changed to %f" %(new_alt)
+		logging.info( "Single altitude changed to %f" %(new_alt))
 		self.controlstate['alt'] = new_alt
 		
 
@@ -1080,7 +1093,7 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 	@pyqtSlot()
 	def update_controls(self):
 		"""Called when the main canvas refreses"""
-		print "update_controls called"
+		logging.info( "update_controls called" )
 		f107 = str(self.maincanv.mr.runs[-1].drivers['f107'])
 		f107a = str(self.maincanv.mr.runs[-1].drivers['f107a'])
 		ap = str(self.maincanv.mr.runs[-1].drivers['ap'][0])
@@ -1123,6 +1136,7 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		self.auxcanv.mpl_connect('button_press_event', self.canvas_clicked)
 		#Create the click property
 		self.last_click = None
+		self.last_click_text = None 
 
 		#Make our layouts (main is vertical, containing two horizontal, top horizontal contains two vertical)
 		vboxmain = QtGui.QVBoxLayout(self.main_widget) # Main box
@@ -1299,6 +1313,9 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		else:
 			self.last_click = []
 
+		if self.last_click_text is not None:
+			self.last_click_text.set_visible(False)
+
 		if ax is not None: #If the click occured in a axes
 			canv = ax.figure.canvas
 			
@@ -1306,7 +1323,8 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 			x = event.xdata 
 			y = event.ydata 
 			if canv.controlstate['plottype']=='map':
-				x,y = canv.pdh.map(x,y,inverse=True)
+				mx,my = x,y
+				x,y = canv.pdh.map(mx,my,inverse=True)
 			
 			#Associated data 
 			xdata = canv.pdh.x.flatten()
@@ -1328,6 +1346,9 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
 				#Add the plotted line to the clicked list
 				self.last_click.append(canv.pdh.map.plot(clx,cly,'rx',markersize=5,latlon=True))
+				self.last_click_text = ax.text(mx,my,'%.1f' % (clz),fontsize=4,color='red',fontweight='bold',\
+					bbox={'facecolor':'white','edgecolor':'none','alpha':0.7, 'pad':1},ha='left',va='bottom')
+				
 				self.auxcanv.controlstate['lat']=clx
 				self.auxcanv.controlstate['lon']=cly
 				self.auxcanv.controlstate['yvar']='Altitude'
@@ -1336,11 +1357,14 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 				self.set_locations(self.auxcanv.controlstate)
 				self.set_aux_comboboxes(self.auxcanv.controlstate)
 				self.auxcanv.refresh()
-				self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='r'))
+				self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='b'))
+
 			elif canv.controlstate['plottype']=='pcolor':
 				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
 				#Add the plotted line to the clicked list
 				self.last_click.append(ax.plot(clx,cly,'rx',markersize=5))
+				self.last_click_text = ax.text(x,y,'%.1f' % (clz),fontsize=4,fontweight='bold',color='red',\
+					bbox={'facecolor':'white','edgecolor':'none','alpha':0.7, 'pad':1},ha='left',va='bottom')
 				#Decide which position axes is not represented in pcolor and plot that axes versus 
 				#color variable on the auxillary canvas
 				for var in ['Latitude','Longitude','Altitude']:
@@ -1375,16 +1399,17 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 				self.auxcanv.refresh()
 
 				if self.auxcanv.controlstate['yvar']=='Altitude':
-					self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='r'))
+					self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='b'))
 				elif self.auxcanv.controlstate['xvar']=='Latitude':
-					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lat'],linestyle=':',linewidth=.5,color='r'))
+					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lat'],linestyle=':',linewidth=.5,color='b'))
 				elif self.auxcanv.controlstate['xvar']=='Longitude':
-					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lon'],linestyle=':',linewidth=.5,color='r'))
+					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lon'],linestyle=':',linewidth=.5,color='b'))
 
 					
 			else:
 				self.last_click.append(ax.plot(clx,cly,'rx',markersize=5))
-				
+				self.last_click_text = ax.text(clx,cly,'%.1f' % (clz),fontweight='bold',color='red',\
+					bbox={'facecolor':'white','edgecolor':'none','alpha':0.7, 'pad':1},ha='left',va='bottom')
 				
 			if canv.pdh.plottypes[canv.pdh.plottype]['gridxy']:
 				clz = zdata[ind]#Closest datapoint z coordinate 
