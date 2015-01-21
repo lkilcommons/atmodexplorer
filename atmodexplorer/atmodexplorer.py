@@ -11,7 +11,7 @@ from PyQt4.QtCore import SIGNAL,SLOT,pyqtSlot,pyqtSignal
 import numpy as np
 
 #import pandas as pd
-import sys, pdb
+import sys, pdb, textwrap
 import datetime
 #sys.path.append('/home/liamk/mirror/Projects/geospacepy')
 #import special_datetime, lmk_utils, satplottools #Datetime conversion class
@@ -30,11 +30,12 @@ from collections import OrderedDict
 import logging
 logging.basicConfig(level=logging.INFO)
 
-def lim_pad(lims):
-	"""Adds a little extra to the limits to make plots more visible"""
-	delta = lims[1]-lims[0]
-	new_lims = (lims[0]-delta*.1,lims[1]+delta*.1)
-	return new_lims
+#def lim_pad(lims):
+#	"""Adds a little extra to the limits to make plots more visible"""
+#	delta = lims[1]-lims[0]
+#	new_lims = (lims[0]-delta*.1,lims[1]+delta*.1)
+#	print lims, new_lims
+#	return new_lims
 
 class ModelRun(object):
 	
@@ -138,20 +139,29 @@ class ModelRun(object):
 
 	def __getitem__(self,key):
 		"""Easy syntax for returning data"""
-		if self.peer is None:
-			return self.vars[key],self.lims[key]
+		if hasattr(key, '__iter__'): #If key is a sequence of some kind
+			var = []
+			lim = []
+			for k in key:
+				v,l = self.__getitem__(k)
+				var.append(v)
+				lim.append(l)
+			return var,lim
 		else:
-			if key not in ['Latitude','Longitude','Altitude']:
-				logging.info( "Entering difference mode for var %s" % (key))
-				#Doesn't make sense to difference locations
-				mydata,mylims = self.vars[key],self.lims[key]
-				peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
-				newdata = mydata-peerdata
-				newlims = (np.nanmin(newdata.flatten()),np.nanmax(newdata.flatten()))
-				newlims = lim_pad(newlims)
-				return newdata,newlims
-			else:
+			if self.peer is None:
 				return self.vars[key],self.lims[key]
+			else:
+				if key not in ['Latitude','Longitude','Altitude']:
+					logging.info( "Entering difference mode for var %s" % (key))
+					#Doesn't make sense to difference locations
+					mydata,mylims = self.vars[key],self.lims[key]
+					peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
+					newdata = mydata-peerdata
+					newlims = (np.nanmin(newdata.flatten()),np.nanmax(newdata.flatten()))
+					#newlims = lim_pad(newlims)
+					return newdata,newlims
+				else:
+					return self.vars[key],self.lims[key]
 
 class MsisRun(ModelRun):
 	""" Class for individual calls to NRLMSISE00 """
@@ -188,8 +198,8 @@ class MsisRun(ModelRun):
 		for v in self.vars:
 			self.vars[v] = np.reshape(self.vars[v],self.shape)
 			if v not in ['Latitude','Longitude','Altitude']:
-				self.lims[v] = lim_pad([np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())])
-
+				self.lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
+				#print "%s:%s" % (v,repr(self.lims[v]))
 			#print "lims for var %s = [%f,%f]" % (v,self.lims[v][0],self.lims[v][1])
 
 	
@@ -275,18 +285,19 @@ class plotDataHandler(object):
 		#this class
 		self.supported_projections={'mill':'Miller Cylindrical','moll':'Mollweide','ortho':'Orthographic'}
 		self.plottypes = dict()
-		self.plottypes['line'] = {'gridxy':False}
-		self.plottypes['pcolor'] = {'gridxy':True}
-		self.plottypes['map'] = {'gridxy':True}
+		self.plottypes['line'] = {'gridxy':False,'overplot_ready':True}
+		self.plottypes['pcolor'] = {'gridxy':True,'overplot_ready':False}
+		self.plottypes['map'] = {'gridxy':True,'overplot_ready':False}
 		if plottype not in self.plottypes:
 			raise ValueError('Invalid plottype %s! Choose from %s' % (plottype,str(self.plottypes.keys())))
 		
 		#Assign settings from input
 		self.plottype = plottype
 		self.mapproj = mapproj # Map projection for Basemap
-
+			
 		#Init the data variables
 		self.clear_data()
+
 
 	def clear_data(self):
 		self.x,self.y,self.z = None,None,None #must be np.array
@@ -296,11 +307,15 @@ class plotDataHandler(object):
 		self.npts = None
 		self.statistics = None # Information about each plotted data
 
-	def associate_data(self,varxyz,vardata,varname,varbounds,varlog):
+	def associate_data(self,varxyz,vardata,varname,varbounds,varlog,multi=False):
 		#Sanity check 
-		thislen = len(vardata.flatten()) 
-		thisshape = vardata.shape
-
+		if not multi:
+			thislen = len(vardata.flatten()) 
+			thisshape = vardata.shape
+		else:
+			thislen = len(vardata[0].flatten()) 
+			thisshape = vardata[0].shape
+		
 		#Check total number of points
 		if self.npts is not None:
 			if thislen != self.npts:
@@ -308,11 +323,12 @@ class plotDataHandler(object):
 					thislen,self.npts))
 
 		#Check shape
-		for v in [self.x,self.y,self.z]:
-			if v is not None:
-				if v.shape != thisshape:
-					raise RuntimeError('Variable %s passed for axes %s had mismatched shape, got %s, expected %s' % (varname,varaxes,
-					str(thisshape),str(v.shape)))
+			for v in [self.x[0] if self.multix else self.x,self.y[0] if self.multiy else self.y,self.z]:
+
+				if v is not None:
+					if v.shape != thisshape:
+						raise RuntimeError('Variable %s passed for axes %s had mismatched shape, got %s, expected %s' % (varname,varaxes,
+						str(thisshape),str(v.shape)))
 
 		#Parse input and assign approriate variable
 		if varxyz in ['x','X',0,'xvar']:
@@ -320,11 +336,13 @@ class plotDataHandler(object):
 			self.xname = varname
 			self.xbounds = varbounds
 			self.xlog = varlog
+			self.xmulti = multi
 		elif varxyz in ['y','Y',1,'yvar']:
 			self.y = vardata
 			self.yname = varname
 			self.ybounds = varbounds
 			self.ylog = varlog
+			self.ymulti = multi
 		elif varxyz in ['z','Z',2,'C','c','zvar']:
 			self.z = vardata
 			self.zname = varname
@@ -338,12 +356,26 @@ class plotDataHandler(object):
 	def compute_statistics(self):
 		self.statistics = OrderedDict()
 		if self.plottype=='line':
-			self.statistics['Mean-%s'%(self.xname)]=np.nanmean(self.x)
-			self.statistics['Mean-%s'%(self.yname)]=np.nanmean(self.y)
-			self.statistics['Median-%s'%(self.xname)]=np.median(self.x)
-			self.statistics['Median-%s'%(self.yname)]=np.median(self.y)
-			self.statistics['StDev-%s'%(self.xname)]=np.nanstd(self.x)
-			self.statistics['StDev-%s'%(self.yname)]=np.nanstd(self.y)
+			if not self.xmulti:
+				self.statistics['Mean-%s'%(self.xname)]=np.nanmean(self.x)
+				self.statistics['Median-%s'%(self.xname)]=np.median(self.x)
+				self.statistics['StDev-%s'%(self.xname)]=np.nanstd(self.x)
+			else:
+				for n in range(len(self.x)):
+					self.statistics['Mean-%s'%(self.xname[n])]=np.nanmean(self.x[n])
+					self.statistics['Median-%s'%(self.xname[n])]=np.median(self.x[n])
+					self.statistics['StDev-%s'%(self.xname[n])]=np.nanstd(self.x[n])
+
+			if not self.ymulti:	
+				self.statistics['Mean-%s'%(self.yname)]=np.nanmean(self.y)
+				self.statistics['Median-%s'%(self.yname)]=np.median(self.y)
+				self.statistics['StDev-%s'%(self.yname)]=np.nanstd(self.y)
+			else:
+				for n in range(len(self.y)):
+					self.statistics['Mean-%s'%(self.yname[n])]=np.nanmean(self.y[n])
+					self.statistics['Median-%s'%(self.yname[n])]=np.median(self.y[n])
+					self.statistics['StDev-%s'%(self.yname[n])]=np.nanstd(self.y[n])
+
 		elif self.plottype=='map' or self.plottypes=='pcolor':
 			self.statistics['Mean-%s'%(self.zname)]=np.nanmean(self.z)
 			self.statistics['Median-%s'%(self.zname)]=np.median(self.z)
@@ -381,6 +413,8 @@ class plotDataHandler(object):
 
 	def plot(self,*args,**kwargs):
 		
+
+
 		if self.map is not None:
 			self.map = None #Make sure that we don't leave any maps lying around if we're not plotting maps
 		
@@ -400,9 +434,8 @@ class plotDataHandler(object):
 
 
 		self.ax.cla()
-		#self.ax.set_adjustable('datalim')
+		self.fig.suptitle('')
 
-		
 		#self.zbounds = (np.nanmin(self.z),np.nanmax(self.z))
 		
 		if self.zlog:
@@ -420,46 +453,98 @@ class plotDataHandler(object):
 				self.cb = None
 				#self.ax.set_position(self.axpos)
 
-			self.ax.plot(self.x,self.y,*args,**kwargs)
-			self.ax.set_xlabel(self.xname)
-			self.ax.set_xlim(self.xbounds)
+			if not self.xmulti and not self.ymulti: #No overplotting
+				self.ax.plot(self.x,self.y,*args,**kwargs)
+				xbnds = self.xbounds
+				ybnds = self.ybounds
+				xnm = self.xname
+				ynm = self.yname
+			elif self.xmulti and not self.ymulti: #Overplotting xvars
+			
+				xbnds = self.xbounds[0]
+				ybnds = self.ybounds
+				xnm = ''
+				for nm in self.xname:
+					xnm += nm+','
+				xnm = xnm[:-1] #Remove last comma
+				print xnm
+				print self.xbounds
+
+				ynm = self.yname
+				for i in range(len(self.x)):
+					self.ax.plot(self.x[i],self.y,label=self.xname[i],*args,**kwargs) #should cycle through colors
+					self.ax.hold(True)
+					
+					#Compute new bounds as incuding all bounds
+					xbnds[0] = xbnds[0] if xbnds[0]<self.xbounds[i][0] else self.xbounds[i][0]
+					xbnds[1] = xbnds[1] if xbnds[1]>self.xbounds[i][1] else self.xbounds[i][1]
+
+			elif self.ymulti and not self.xmulti: #Overplotting yvars
+				ybnds = self.ybounds[0]
+				xbnds = self.xbounds
+				xnm = self.xname
+				ynm = ''
+				for nm in self.yname:
+					ynm += nm+','
+				ynm = ynm[:-1] #Remove last comma
+				for i in range(len(self.y)):
+					self.ax.plot(self.x,self.y[i],label=self.yname[i],*args,**kwargs) #should cycle through colors
+					self.ax.hold(True)
+					#Compute new bounds as incuding all bounds
+					
+					print self.ybounds[i]
+					ybnds[0] = ybnds[0] if ybnds[0]<self.ybounds[i][0] else self.ybounds[i][0]
+					ybnds[1] = ybnds[1] if ybnds[1]>self.ybounds[i][1] else self.ybounds[i][1]
+
+			#Set axes appearance and labeling
+			self.ax.set_xlabel(xnm)
 			if self.xlog:
 				self.ax.set_xscale('log',nonposx='clip')
 				self.ax.get_xaxis().get_major_formatter().labelOnlyBase = False
-				#self.ax.set_xlim(0,np.log(self.xbounds[1]))
-			self.ax.set_ylabel(self.yname)
-			self.ax.set_ylim(self.ybounds)
+				
+			self.ax.set_xlim(xbnds)
+			
+			self.ax.set_ylabel(ynm)
 			if self.ylog:
 				self.ax.set_yscale('log',nonposx='clip')
 				self.ax.get_yaxis().get_major_formatter().labelOnlyBase = False
 				
+			self.ax.set_ylim(ybnds)
+			
+			if self.xmulti or self.ymulti:
+				self.ax.legend()
+
 				#self.ax.set_ylim(0,np.log(self.ybounds[1]))
-			self.ax.set_title('%s vs. %s' % (self.xname,self.yname))
+			self.ax.set_title('%s vs. %s' % (xnm if not self.xlog else 'log(%s)'%(xnm),ynm if not self.ylog else 'log(%s)'%(ynm)))
+			self.ax.grid(True,linewidth=.1)
 			if not self.xlog and not self.ylog:
 				self.ax.set_aspect(1./self.ax.get_data_ratio())
+
+			self.ax.set_position([.15,.15,.75,.75])
 			#try:
 			#	self.fig.tight_layout()
 			#except:
 			#	print "Tight layout for line failed"
 		
 		elif self.plottype == 'pcolor':
-
 			
 			mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
 			#m.draw()
 
 			self.ax.set_xlabel(self.xname)
-			self.ax.set_xlim(self.xbounds)
 			if self.xlog:
 				self.ax.set_xscale('log',nonposx='clip')
-			
+			self.ax.set_xlim(self.xbounds)
+
 			self.ax.set_ylabel(self.yname)
-			self.ax.set_ylim(self.ybounds)
+			
 			if self.ylog:
 				self.ax.set_xscale('log',nonposx='clip')
+			self.ax.set_ylim(self.ybounds)
+			
+			if self.zlog: #Locator goes to ticks argument
+				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter,ticks=locator)
 
-			if self.zlog:
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter)
 			else:
 				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
 
@@ -470,7 +555,8 @@ class plotDataHandler(object):
 
 			self.cb.set_label(self.zname)
 			self.ax.set_aspect(1./self.ax.get_data_ratio())
-			self.fig.suptitle('%s vs. %s (color:%s)' % (self.xname,self.yname,self.zname))
+			self.fig.suptitle('%s vs. %s (color:%s)' % (self.xname,self.yname,
+				self.zname if not self.zlog else 'log(%s)'%self.zname))
 			
 		elif self.plottype == 'map':
 			if self.mapproj=='moll':
@@ -523,7 +609,8 @@ class plotDataHandler(object):
 			self.ax.set_position([.1,.3,.8,.8])
 
 			self.cb.set_label(self.zname)
-			self.fig.suptitle('%s Projection Map of %s' % (self.supported_projections[self.mapproj],self.zname))
+			self.fig.suptitle('%s Projection Map of %s' % (self.supported_projections[self.mapproj],
+				self.zname if not self.zlog else 'log(%s)'%(self.zname)))
 			self.map = m
 		#Now call the canvas cosmetic adjustment routine
 		self.canvas.apply_lipstick()
@@ -616,7 +703,8 @@ class singleMplCanvas(FigureCanvas):
 						 'xvar':'Longitude','xbounds':[-180.,180.],'xnpts':50.,'xlog':False,\
 						 'yvar':'Latitude','ybounds':[-90.,90.],'ynpts':50.,'ylog':False,\
 						 'zvar':'Temperature','zbounds':None,'zlog':False,
-						 'model':'msis','run_model_on_refresh':True,'differencemode':False}	
+						 'model':'msis','run_model_on_refresh':True,'differencemode':False,\
+						 'xmulti':False,'ymulti':False}	
 
 		#This will allow us to see what has changed between
 		#redraws/refreshes
@@ -626,9 +714,16 @@ class singleMplCanvas(FigureCanvas):
 		self.create_actions()
 		self.init_context_menu()
 
-	def changed(self,key):
-		"""Was a control described by key 'key' changed since last refresh?"""
-		return self.last_controlstate[key]!=self.controlstate[key]
+	def changed(self,key=None):
+		"""Was a control described by key 'key' changed since last refresh? If no key, return dictionary of all changed items"""
+		if key is not None:
+			return self.last_controlstate[key]!=self.controlstate[key]
+		else: #return a dictionary of all changed controls
+			changed_items = dict()
+			for kee in self.controlstate:
+				if self.changed(key=kee):
+					changed_items[kee]=self.controlstate[kee]
+			return changed_items
 
 	def plotProperty(self,prop):
 		"""Simple convenience function to retrieve a property of the current type of plot"""
@@ -646,6 +741,17 @@ class singleMplCanvas(FigureCanvas):
 		"""Clears the data handler data"""
 		self.pdh.clear_data()
 
+	def is_multi(self,coord):
+		"""Convenience function for testing whether the currently selected x or y variables are multiple vars on same axes"""
+		return hasattr(self.controlstate[coord+'var'],'__iter__') #just tests if the controlstate is a list/tuple
+			
+	def is_position(self,coord):
+		"""Convenience function for testing whether the currently selected x or y variables are positions"""
+		if not self.is_multi(coord):
+			return self.controlstate[coord+'var'] in self.mr.nextrun.vars
+		else:
+			return any(v in self.mr.nextrun.vars for v in self.controlstate[coord+'var'])  
+		
 	def prepare_model_run(self):
 		"""Determines which position variables (lat,lon, or alt) are constant,
 		given the current settings of the xvar, yvar and zvar. Then reads the 
@@ -667,14 +773,14 @@ class singleMplCanvas(FigureCanvas):
 		
 		if self.plotProperty('gridxy'):
 			#Fault checks
-			if self.controlstate['xvar'] not in self.mr.nextrun.vars: #vars dict starts only with position and time
+			if not self.is_position('x'): #vars dict starts only with position and time
 				raise RuntimeError('xvar %s is not a valid position variable!' % (self.controlstate['xvar']))
 			else:
 				#self.mr.nextrun.lims[self.controlstate['xvar']] = self.controlstate['xbounds']
 				self.mr.nextrun.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
 				self.mr.nextrun.set_x(self.controlstate['xvar'])
 
-			if self.controlstate['yvar'] not in self.mr.nextrun.vars:
+			if not self.is_position('y'):
 				raise RuntimeError('yvar %s is not a valid position variable!' % (self.controlstate['yvar']))
 			else:
 				#self.mr.nextrun.lims[self.controlstate['yvar']] = self.controlstate['ybounds']
@@ -683,24 +789,35 @@ class singleMplCanvas(FigureCanvas):
 			
 		else: #We do not need to grid data
 			#Check that at least one selected variable is a location
-			if self.controlstate['xvar'] in self.mr.nextrun.vars:
+			#Handle multiple variables on an axis
+			if self.is_multi('x') and self.is_position('x'):
+				self.controlstate['xvar']=self.controlstate['xvar'][0]
+				raise RuntimeError('Multiple plotting of position variables is not allowed!')
+
+			elif self.is_multi('y') and self.is_position('y'):
+				self.controlstate['yvar']=self.controlstate['yvar'][0]
+				raise RuntimeError('Multiple plotting of position variables is not allowed!')
+				
+			elif not self.is_position('x') and not self.is_position('y'):
+				raise RuntimeError('%s and %s are both not valid position variables!' % (self.controlstate['xvar'],self.controlstate['yvar']))
+			
+			elif not self.is_multi('x') and self.is_position('x'): #It's scalar, so check if it's a position
 				#self.mr.nextrun.lims[self.controlstate['xvar']] = self.controlstate['xbounds']
 				self.mr.nextrun.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
 				self.mr.nextrun.set_x(self.controlstate['xvar'])
-				
-			elif self.controlstate['yvar'] in self.mr.nextrun.vars:
-				#self.mr.nextrun.lims[self.controlstate['yvar']] = self.controlstate['ybounds']
+
+			elif not self.is_multi('y') and self.is_position('y'): #It's scalar, so check if it's a position
 				self.mr.nextrun.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
 				self.mr.nextrun.set_y(self.controlstate['yvar'])
-				
 			else:
-				raise RuntimeError('%s and %s are both not valid position variables!' % (self.controlstate['xvar'],self.controlstate['yvar']))
-			
+				raise RuntimeError('Nonsensical variables: xvar:%s\n yvar:%s\n' % (repr(self.controlstate['xvar']),repr(self.controlstate['yvar'])))
+
 
 	@pyqtSlot()
-	def refresh(self,force_full_refresh=False):
+	def refresh(self,force_full_refresh=False, force_autoscale=False):
 		"""Redraws what is on the plot. Trigged on control change"""
 		ffr = force_full_refresh
+		fauto = force_autoscale
 
 		if self.changed('plottype') or ffr:
 			#Determine if we need to rerun the model
@@ -735,7 +852,14 @@ class singleMplCanvas(FigureCanvas):
 		
 		if self.changed('differencemode'):
 			self.controlstate['run_model_on_refresh'] = True
-		
+
+		if self.changed('plottype') or self.changed('differencemode') or ffr:
+			self.controlstate['xmulti']=False
+			self.controlstate['ymulti']=False
+			self.controlstate['xlog']=False
+			self.controlstate['ylog']=False
+			self.controlstate['zlog']=False
+			
 		if self.controlstate['run_model_on_refresh'] or ffr:
 			self.prepare_model_run()
 			self.mr.nextrun.populate() #Trigger next model run
@@ -747,8 +871,12 @@ class singleMplCanvas(FigureCanvas):
 		ydata,ylims = self.mr[self.controlstate['yvar']] #returns data,lims
 		zdata,zlims = self.mr[self.controlstate['zvar']] #returns data,lims
 		
+		#print '%s:%s' % (self.controlstate['xvar'],repr(xlims))
+		#print '%s:%s' % (self.controlstate['yvar'],repr(ylims))
+		#print '%s:%s' % (self.controlstate['zvar'],repr(zlims))
+		
 		#Reset the bounds if we have changed any variables or switched on or off of difference mode
-		if self.changed('xvar') or self.changed('yvar') or self.changed('zvar') or self.changed('differencemode') or ffr:
+		if self.changed('xvar') or self.changed('yvar') or self.changed('zvar') or self.changed('differencemode') or ffr or fauto:
 			self.controlstate['xbounds'] = xlims
 			self.controlstate['ybounds'] = ylims
 			self.controlstate['zbounds'] = zlims
@@ -756,11 +884,11 @@ class singleMplCanvas(FigureCanvas):
 		#Associate data in the data handler based on what variables are desired
 		if self.changed('xvar') or self.changed('xbounds') or self.changed('xlog') or self.controlstate['run_model_on_refresh'] or ffr: 
 			xname = self.controlstate['xvar']
-			self.pdh.associate_data('x',xdata,xname,self.controlstate['xbounds'],self.controlstate['xlog'])
+			self.pdh.associate_data('x',xdata,xname,self.controlstate['xbounds'],self.controlstate['xlog'],multi=self.controlstate['xmulti'])
 			
 		if self.changed('yvar') or self.changed('ybounds') or self.changed('ylog') or self.controlstate['run_model_on_refresh'] or ffr: 
 			yname = self.controlstate['yvar']
-			self.pdh.associate_data('y',ydata,yname,self.controlstate['ybounds'],self.controlstate['ylog'])
+			self.pdh.associate_data('y',ydata,yname,self.controlstate['ybounds'],self.controlstate['ylog'],multi=self.controlstate['ymulti'])
 			
 		if self.changed('zvar') or self.changed('zbounds') or self.changed('zlog') or self.controlstate['run_model_on_refresh'] or ffr:
 			zname = self.controlstate['zvar']
@@ -823,6 +951,14 @@ class singleMplCanvas(FigureCanvas):
 		self.actions['difference'].setCheckable(True)
 		self.connect(self.actions['difference'],SIGNAL("toggled(bool)"),self,SLOT('on_differencemodetoggled(bool)'))
 
+	def make_multi(self,coord,var):
+			if not hasattr(self.controlstate[coord+'var'],'__iter__'):
+				self.controlstate[coord+'var'] = [self.controlstate[coord+'var'],var]
+				self.controlstate[coord+'multi']=True
+			else:
+				self.controlstate[coord+'var'].append(var)
+			self.refresh(force_autoscale=True)
+
 	#Event handlers
 	@pyqtSlot('QPoint')
 	def contextMenuRequested(self,point):
@@ -831,12 +967,14 @@ class singleMplCanvas(FigureCanvas):
 		sublim = QtGui.QMenu('Axes limits')
 				
 		for var in ['x','y']:
-			sublog.addAction(self.actions[var+'log'])
-			if self.controlstate[var+'log']:
-				#Annoying...there's probably a better way to block signals
-				self.actions[var+'log'].blockSignals(True)
-				self.actions[var+'log'].setChecked(True)
-				self.actions[var+'log'].blockSignals(False)
+			#Only non-position variables can be log
+			if not self.is_position(var):
+				sublog.addAction(self.actions[var+'log'])
+				if self.controlstate[var+'log']:
+					#Annoying...there's probably a better way to block signals
+					self.actions[var+'log'].blockSignals(True)
+					self.actions[var+'log'].setChecked(True)
+					self.actions[var+'log'].blockSignals(False)
 
 			sublim.addAction(self.actions[var+'bounds'])
 		
@@ -845,6 +983,24 @@ class singleMplCanvas(FigureCanvas):
 			sublog.addAction(self.actions['zlog'])
 			sublim.addAction(self.actions['zbounds'])
 		
+		#Only build overplots for non-position axes
+		if self.plotProperty('overplot_ready'):
+			if not self.is_position('x'):
+				suboverx = QtGui.QMenu('Overplot on X')
+				for v in self.mr.runs[-1].vars:
+					action = QtGui.QAction('%s' % (v), self)
+					self.connect(action,SIGNAL("triggered()"),lambda var=v: self.make_multi('x',var))
+					suboverx.addAction(action)
+				menu.addMenu(suboverx)
+			
+			if not self.is_position('y'):
+				subovery = QtGui.QMenu('Overplot on Y')
+				for v in self.mr.runs[-1].vars:
+					action = QtGui.QAction('%s' % (v), self)
+					self.connect(action,SIGNAL("triggered()"),lambda var=v: self.make_multi('y',var))
+					subovery.addAction(action)
+				menu.addMenu(subovery)
+
 		menu.addMenu(sublog)
 		menu.addMenu(sublim)
 		menu.addAction(self.actions['refresh'])
@@ -896,6 +1052,7 @@ class singleMplCanvas(FigureCanvas):
 		"""Fancy multi-argument callback (use lambdas in the connect signal call)"""
 		logging.info( "%s log scale is %s" % (var,str(boo)))
 		self.controlstate[var.lower()+'log'] = boo
+		self.refresh()
 
 	@pyqtSlot('QDateTime')
 	def on_datetimechange(self,qdt):
@@ -1017,7 +1174,8 @@ class mainCanvas(singleMplCanvas):
 
 			mpl.artist.setp(self.ax.get_xmajorticklabels(),size=fs,rotation=30)
 			mpl.artist.setp(self.ax.get_ymajorticklabels(),size=fs)
-			
+			mpl.artist.setp(self.pdh.cb.ax.get_xmajorticklabels(),size=fs,rotation=45)
+						
 			#Label is a text object
 			self.ax.xaxis.label.set_fontsize(fs)
 			self.ax.yaxis.label.set_fontsize(fs)
@@ -1296,7 +1454,7 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		
 	def plot_clicked(self,tf):
 		self.maincanv.refresh()
-		self.auxcanv.refresh()
+		self.auxcanv.refresh(force_autoscale=True)
 
 	def canvas_clicked(self,event):
 		"""Event handler for an matplotlib event, instead of a QT event"""
@@ -1356,8 +1514,8 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 				self.auxcanv.controlstate['alt']=self.maincanv.controlstate['alt']
 				self.set_locations(self.auxcanv.controlstate)
 				self.set_aux_comboboxes(self.auxcanv.controlstate)
-				self.auxcanv.refresh()
-				self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='b'))
+				self.auxcanv.refresh(force_autoscale=True)
+				self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle='-',linewidth=.5,color='b'))
 
 			elif canv.controlstate['plottype']=='pcolor':
 				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
@@ -1396,14 +1554,14 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 								self.auxcanv.controlstate['alt']=clx
 				self.set_locations(self.auxcanv.controlstate)
 				self.set_aux_comboboxes(self.auxcanv.controlstate)
-				self.auxcanv.refresh()
+				self.auxcanv.refresh(force_autoscale=True)
 
 				if self.auxcanv.controlstate['yvar']=='Altitude':
-					self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle=':',linewidth=.5,color='b'))
+					self.last_click[-1].append(self.auxcanv.ax.axhline(self.maincanv.controlstate['alt'],linestyle='-',linewidth=.5,color='b'))
 				elif self.auxcanv.controlstate['xvar']=='Latitude':
-					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lat'],linestyle=':',linewidth=.5,color='b'))
+					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lat'],linestyle='-',linewidth=.5,color='b'))
 				elif self.auxcanv.controlstate['xvar']=='Longitude':
-					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lon'],linestyle=':',linewidth=.5,color='b'))
+					self.last_click[-1].append(self.auxcanv.ax.axvline(self.maincanv.controlstate['lon'],linestyle='-',linewidth=.5,color='b'))
 
 					
 			else:
@@ -1460,8 +1618,8 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 	def about(self):
 		QtGui.QMessageBox.about(self, "About",
 			textwrap.dedent("""The AtModExplorer (C) 2014 University of Colorado Space Environemnt Data Analysis Group
-								A tool for interactive viewing of output from emperical models of the atmosphere.
-								For education use only. Written by Liam Kilcommons <liam.kilcommons@colorado.edu>
+A tool for interactive viewing of output from emperical models of the atmosphere.
+For education use only. Written by Liam Kilcommons <liam.kilcommons@colorado.edu>
 			"""))
 
 if __name__== "__main__":
