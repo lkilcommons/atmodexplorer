@@ -1,0 +1,7 @@
+#!/usr/bin/env python
+import atmodexplorer, sys
+#Script execution
+qApp = atmodexplorer.QtGui.QApplication(sys.argv)
+aw = atmodexplorer.AtModExplorerApplicationWindow()
+aw.show()
+sys.exit(qApp.exec_())

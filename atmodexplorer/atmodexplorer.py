@@ -566,7 +566,8 @@ class plotDataHandler(object):
 				m = Basemap(projection=self.mapproj,llcrnrlat=int(self.ybounds[0]),urcrnrlat=int(self.ybounds[1]),\
 					llcrnrlon=int(self.xbounds[0]),urcrnrlon=int(self.xbounds[1]),lat_ts=20,resolution='c',ax=self.ax)
 			elif self.mapproj=='ortho':
-				m = Basemap(projection='ortho',ax=self.ax,lat_0=int(self.canvas.controlstate['lat']),lon_0=int(self.canvas.controlstate['lon']),resolution='l')
+				m = Basemap(projection='ortho',ax=self.ax,lat_0=int(self.canvas.controlstate['lat']),
+					lon_0=int(self.canvas.controlstate['lon']),resolution='l')
 			
 			m.drawcoastlines(linewidth=self.map_lw)
 
@@ -576,11 +577,11 @@ class plotDataHandler(object):
 			m.drawparallels(np.arange(-90.,91.,15.),linewidth=self.map_lw)
 			m.drawmeridians(np.arange(-180.,181.,30.),linewidth=self.map_lw)
 			if self.zlog:
-				mappable = m.contour(self.x,self.y,self.z,15,linewidths=1.5,latlon=True,norm=norm,
-					vmin=self.zbounds[0],vmax=self.zbounds[1],locator=locator,**kwargs)
+				mappable = m.pcolormesh(self.x,self.y,self.z,linewidths=1.5,latlon=True,norm=norm,
+					vmin=self.zbounds[0],vmax=self.zbounds[1],shading='gouraud',**kwargs)
 			else:
-				mappable = m.contour(self.x,self.y,self.z,15,linewidths=1.5,latlon=True,norm=norm,
-					vmin=self.zbounds[0],vmax=self.zbounds[1],**kwargs)
+				mappable = m.pcolormesh(self.x,self.y,self.z,linewidths=1.5,latlon=True,norm=norm,
+					vmin=self.zbounds[0],vmax=self.zbounds[1],shading='gouraud',**kwargs)
 				
 			
 			latbounds = [self.ybounds[0],self.ybounds[1]]
@@ -596,7 +597,7 @@ class plotDataHandler(object):
 
 
 			if self.zlog:
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,location='horizontal',format=formatter)
+				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter,ticks=locator)
 			else:
 				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
 
@@ -826,6 +827,9 @@ class singleMplCanvas(FigureCanvas):
 			if oldplottype['gridxy'] != newplottype['gridxy']: #we are going from vectors to grids or visa-versa
 				self.controlstate['run_model_on_refresh']=True #Must force re-run
 			self.pdh.plottype=self.controlstate['plottype']
+			#Also reset any multiplotting
+			self.controlstate['xmulti']=False
+			self.controlstate['ymulti']=False
 
 		if self.changed('datetime') or ffr:
 			#Force model rerun
@@ -852,13 +856,10 @@ class singleMplCanvas(FigureCanvas):
 		
 		if self.changed('differencemode'):
 			self.controlstate['run_model_on_refresh'] = True
-
-		if self.changed('plottype') or self.changed('differencemode') or ffr:
-			self.controlstate['xmulti']=False
-			self.controlstate['ymulti']=False
-			self.controlstate['xlog']=False
-			self.controlstate['ylog']=False
-			self.controlstate['zlog']=False
+		
+		#Reset multi plotting if we've changed the plot type
+		if self.changed('plottype') or ffr:
+			pass
 			
 		if self.controlstate['run_model_on_refresh'] or ffr:
 			self.prepare_model_run()
@@ -875,11 +876,16 @@ class singleMplCanvas(FigureCanvas):
 		#print '%s:%s' % (self.controlstate['yvar'],repr(ylims))
 		#print '%s:%s' % (self.controlstate['zvar'],repr(zlims))
 		
-		#Reset the bounds if we have changed any variables or switched on or off of difference mode
+		#Reset the bounds, multiplotting and turn of log scaling if we have changed any variables or switched on or off of difference mode
 		if self.changed('xvar') or self.changed('yvar') or self.changed('zvar') or self.changed('differencemode') or ffr or fauto:
 			self.controlstate['xbounds'] = xlims
 			self.controlstate['ybounds'] = ylims
 			self.controlstate['zbounds'] = zlims
+			self.controlstate['xlog']=False
+			self.controlstate['ylog']=False
+			self.controlstate['zlog']=False
+			self.controlstate['xmulti']=False
+			self.controlstate['ymulti']=False
 
 		#Associate data in the data handler based on what variables are desired
 		if self.changed('xvar') or self.changed('xbounds') or self.changed('xlog') or self.controlstate['run_model_on_refresh'] or ffr: 
@@ -1017,7 +1023,7 @@ class singleMplCanvas(FigureCanvas):
 		mystr = ''
 		for key in self.pdh.statistics:
 			try:
-				if self.pdh.statistics[key] < 10000. and self.pdh.statistics[key]>.0001:
+				if np.abs(self.pdh.statistics[key]) < 10000. and np.abs(self.pdh.statistics[key])>.0001:
 					mystr+='%s:%.3f\n' % (key,self.pdh.statistics[key])
 				else:
 					mystr+='%s:%.3e\n' % (key,self.pdh.statistics[key])
@@ -1202,6 +1208,8 @@ class mainCanvas(singleMplCanvas):
 	  				
 		elif self.pdh.plottype=='map':
 			#Colorbar Ticks
+
+			mpl.artist.setp(self.pdh.cb.ax.get_xmajorticklabels(),size=fs,rotation=45)
 			self.pdh.cb.ax.xaxis.set_tick_params(width=w,pad=pd+.5)
 			self.pdh.cb.ax.yaxis.set_tick_params(width=w,pad=pd+.5)
 			self.pdh.cb.outline.set_linewidth(w)
@@ -1317,27 +1325,6 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		vboxtopl.addWidget(self.auxcanv)
 		vboxtopl.addStretch(1)
 
-		#Create the output box
-		self.tbox = QtGui.QTextEdit('MSIS output')
-		vboxtopl.addWidget(self.tbox)
-		self.update_controls() #Init the textbox
-
-		#Create the plot button
-		pbutton = QtGui.QPushButton('Plot')
-		pbutton.clicked[bool].connect(self.plot_clicked)
-		vboxtopl.addWidget(pbutton)
-
-		
-		#Create the time changer
-		tlabel = QtGui.QLabel()
-		tlabel.setText('UT Time')
-		self.tdte = QtGui.QDateTimeEdit()
-		self.tdte.setDateTime(self.maincanv.controlstate['datetime'])
-		self.tdte.dateTimeChanged['QDateTime'].connect(self.maincanv.on_datetimechange)
-		vboxtopl.addWidget(tlabel)
-		vboxtopl.addWidget(self.tdte)
-
-
 		loclabel = QtGui.QLabel()
 		loclabel.setText('Geodetic Latitude, Longitude, Altitude(km)')
 		#Create the fill in text boxes for latitude, longitude and altitude
@@ -1364,6 +1351,26 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		hboxtoplloc.addWidget(self.qlealt)
 		vboxtopl.addLayout(hboxtoplloc)
 
+		#Create the output box
+		self.tbox = QtGui.QTextEdit('MSIS output')
+		vboxtopl.addWidget(self.tbox)
+		self.update_controls() #Init the textbox
+
+		#Create the plot button
+		pbutton = QtGui.QPushButton('&Plot')
+		pbutton.clicked[bool].connect(self.plot_clicked)
+		vboxtopl.addWidget(pbutton)
+
+		
+		#Create the time changer
+		tlabel = QtGui.QLabel()
+		tlabel.setText('UT Time')
+		self.tdte = QtGui.QDateTimeEdit()
+		self.tdte.setDateTime(self.maincanv.controlstate['datetime'])
+		self.tdte.dateTimeChanged['QDateTime'].connect(self.maincanv.on_datetimechange)
+		vboxtopl.addWidget(tlabel)
+		vboxtopl.addWidget(self.tdte)
+
 		#Create the variable selectors for the main window
 		self.comboModel = QtGui.QComboBox()
 		self.comboModel.addItem('NRLMSISE00')
@@ -1375,21 +1382,26 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		
 		self.comboXvar = QtGui.QComboBox()
 		self.comboXvaraux = QtGui.QComboBox()
-		self.comboXlab = QtGui.QLabel('X Var')
+		self.comboXlab = QtGui.QLabel('Main X Var')
+		self.comboXlabaux = QtGui.QLabel('Aux X Var')
+
 		comboXVbox = QtGui.QVBoxLayout()
 		comboXVbox.addWidget(self.comboXlab)
 		comboXVbox.addWidget(self.comboXvar)
+		comboXVbox.addWidget(self.comboXlabaux)
 		comboXVbox.addWidget(self.comboXvaraux)
 		
-
 		self.comboYvar = QtGui.QComboBox()
 		self.comboYvaraux = QtGui.QComboBox()
-		self.comboYlab = QtGui.QLabel('Y Var')
+		self.comboYlab = QtGui.QLabel('Main Y Var')
+		self.comboYlabaux = QtGui.QLabel('Aux Y Var')
+		
 		comboYVbox = QtGui.QVBoxLayout()
 		comboYVbox.addWidget(self.comboYlab)
 		comboYVbox.addWidget(self.comboYvar)
+		comboYVbox.addWidget(self.comboYlabaux)
 		comboYVbox.addWidget(self.comboYvaraux)
-
+		
 		self.comboZvar = QtGui.QComboBox()
 		self.comboZlab = QtGui.QLabel('Color Var')
 		comboZVbox = QtGui.QVBoxLayout()
@@ -1456,12 +1468,18 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 		self.maincanv.refresh()
 		self.auxcanv.refresh(force_autoscale=True)
 
+	def canvas_key_pressed(self,event):
+		"""Event handler for keyboard events while canvas has focus"""
+		pass
+
 	def canvas_clicked(self,event):
 		"""Event handler for an matplotlib event, instead of a QT event"""
 
 		#Ignore everything except left-clicks
+		#right-clicks envoke a QT Menu
 		if event.button!=1:
 			return
+
 
 		ax = event.inaxes #Which axes the click occured in
 		if self.last_click is not None:
@@ -1476,7 +1494,13 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 
 		if ax is not None: #If the click occured in a axes
 			canv = ax.figure.canvas
-			
+
+			#There's nothing easy a click can do on a multiple line axes,
+			#so just do nothing
+			if canv.pdh.xmulti or canv.pdh.ymulti:
+				#give up and go home
+				return
+
 			#Click location
 			x = event.xdata 
 			y = event.ydata 
@@ -1499,12 +1523,16 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 			clx = xdata[ind]#Closest datapoint x coordinate 
 			cly = ydata[ind]#Closest datapoint y coordinate 
 			clz = zdata[ind]#Closest datapoint z coordinate
+			
+			clxtxt = '%.2e' % (clx) if np.abs(clx) < .01 or np.abs(clx) > 10000 else '%.2f' % (clx)
+			clytxt = '%.2e' % (cly) if np.abs(cly) < .01 or np.abs(cly) > 10000 else '%.2f' % (cly)
+			clztxt = '%.2e' % (clz) if np.abs(clz) < .01 or np.abs(clz) > 10000 else '%.2f' % (clz)
 				
 			if canv.controlstate['plottype']=='map': 
 				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
 				#Add the plotted line to the clicked list
 				self.last_click.append(canv.pdh.map.plot(clx,cly,'rx',markersize=5,latlon=True))
-				self.last_click_text = ax.text(mx,my,'%.1f' % (clz),fontsize=4,color='red',fontweight='bold',\
+				self.last_click_text = ax.text(mx,my,clztxt,fontsize=4,color='red',fontweight='bold',\
 					bbox={'facecolor':'white','edgecolor':'none','alpha':0.7, 'pad':1},ha='left',va='bottom')
 				
 				self.auxcanv.controlstate['lat']=clx
@@ -1521,7 +1549,7 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 				#Plot point at clicked location and add resulting lines.line2D to the 'clicked' list
 				#Add the plotted line to the clicked list
 				self.last_click.append(ax.plot(clx,cly,'rx',markersize=5))
-				self.last_click_text = ax.text(x,y,'%.1f' % (clz),fontsize=4,fontweight='bold',color='red',\
+				self.last_click_text = ax.text(x,y,clztxt,fontsize=4,fontweight='bold',color='red',\
 					bbox={'facecolor':'white','edgecolor':'none','alpha':0.7, 'pad':1},ha='left',va='bottom')
 				#Decide which position axes is not represented in pcolor and plot that axes versus 
 				#color variable on the auxillary canvas
@@ -1566,19 +1594,19 @@ class AtModExplorerApplicationWindow(QtGui.QMainWindow):
 					
 			else:
 				self.last_click.append(ax.plot(clx,cly,'rx',markersize=5))
-				self.last_click_text = ax.text(clx,cly,'%.1f' % (clz),fontweight='bold',color='red',\
+				self.last_click_text = ax.text(clx,cly,clztxt,fontweight='bold',color='red',\
 					bbox={'facecolor':'white','edgecolor':'none','alpha':0.7, 'pad':1},ha='left',va='bottom')
 				
 			if canv.pdh.plottypes[canv.pdh.plottype]['gridxy']:
 				clz = zdata[ind]#Closest datapoint z coordinate 
 				#Show a message for each click in the app status bar
-				self.statusBar().showMessage("%s:%f, %s:%f, %s:%f" % (canv.controlstate['xvar'],clx,
-																	  canv.controlstate['yvar'],cly,
-																	  canv.controlstate['zvar'],clz), 2000)
+				self.statusBar().showMessage("%s:%s, %s:%s, %s:%s" % (canv.controlstate['xvar'],clxtxt,
+																	  canv.controlstate['yvar'],clytxt,
+																	  canv.controlstate['zvar'],clztxt), 4000)
 
 			else:
-				self.statusBar().showMessage("%s:%f, %s:%f" % (canv.controlstate['xvar'],clx,
-															   canv.controlstate['yvar'],cly), 2000)
+				self.statusBar().showMessage("%s:%s, %s:%s" % (canv.controlstate['xvar'],clxtxt,
+															   canv.controlstate['yvar'],clytxt), 4000)
 				clz = np.nan
 				
 			#Redraw
@@ -1622,9 +1650,3 @@ A tool for interactive viewing of output from emperical models of the atmosphere
 For education use only. Written by Liam Kilcommons <liam.kilcommons@colorado.edu>
 			"""))
 
-if __name__== "__main__":
-	#Script execution
-	qApp = QtGui.QApplication(sys.argv)
-	aw = AtModExplorerApplicationWindow()
-	aw.show()
-	sys.exit(qApp.exec_())

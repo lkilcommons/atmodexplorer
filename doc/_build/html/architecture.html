@@ -1,0 +1,357 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Code Architecture &mdash; AtModExplorer 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="AtModExplorer 0.1 documentation" href="index.html" />
+    <link rel="prev" title="Workflows" href="workflows.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="workflows.html" title="Workflows"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">AtModExplorer 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="code-architecture">
+<h1>Code Architecture<a class="headerlink" href="#code-architecture" title="Permalink to this headline">¶</a></h1>
+<p>This GUI is intended to be as simple and extensible as possible. Therefore the class structure is designed around the GUI elements, with some background classes to handle data management in a sensible way.</p>
+<div class="section" id="class-organization">
+<h2>Class Organization<a class="headerlink" href="#class-organization" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><a class="reference internal" href="#atmodexplorerapplicationwindow">AtModExplorerApplicationWindow</a> is the GUI itself. It extends QtGui.QMainWindow. Pretty much everything is a member of this class. Most especially, this class has all of the QT controls as members. It&#8217;s methods are organized around getting information into and out of the QT widgets, as well as handling any GUI-wide events (i.e. clicks on either the main or auxillary canvases), or cross-canvas events (like clicking on the main canvas map to get the altitude profile on the auxillary canvas).</li>
+<li><a class="reference internal" href="#maincanvas">mainCanvas</a> and <a class="reference internal" href="#auxcanvas">auxCanvas</a> are thin subclasses of <a class="reference internal" href="#singlemplcanvas">singleMplCanvas</a> which is the workhorse of the whole program. The singleMplCanvas is a subclass of matplotlib&#8217;s backends.backend_qt4agg.FigureCanvasQTAgg, which is basically the Qt version of the canvas class which contains and manages a matplotlib figure. Each of the canvas classes has associated with it a <a class="reference internal" href="#plotdatahandler">plotDataHandler</a> instance and <a class="reference internal" href="#modelrunner">ModelRunner</a> instance, which handle plotting and getting data respectively. The most important member of these classes is the &#8216;controlstate&#8217; dictionary. This dictionary hold all of the information required to run the model per user specification of date, or position (latitude,longitude,altitude), as well as all information as to what to plot (i.e. what variable goes on the x axis, are we plotting a map or a pseudocolor plot, etc.). The <a class="reference internal" href="#maincanvas">mainCanvas</a> and <a class="reference internal" href="#auxcanvas">auxCanvas</a> classes only include one additional method beyond those of the superclass: apply_lipstick(), which customizes the look of that canvas for it&#8217;s location on the GUI.</li>
+<li><a class="reference internal" href="#plotdatahandler">plotDataHandler</a> is in charge of keeping track of what data is currently plotted on the canvas, the bounds of it&#8217;s axes, the label for each axes, and especially what type of plot is to be plotted. It has the methods which actually call &#8216;plot&#8217;.</li>
+<li><a class="reference internal" href="#modelrunner">ModelRunner</a> is in charge of coordinating and storing different model runs. It maintains a &#8216;runs&#8217; list of <a class="reference internal" href="#modelrun">ModelRun</a> objects, each of which represent a single run of the model for new inputs. Examples of user requests which will trigger a model run include: changing from a 3-d plot type to a 2-d one, or changing the date. Simply changing the variable will not initiate a new model run, nor will, for example, changing any visual aspect of the figures.</li>
+</ul>
+</div>
+<div class="section" id="qt-application-window">
+<h2>QT Application Window<a class="headerlink" href="#qt-application-window" title="Permalink to this headline">¶</a></h2>
+<p>This is the main GUI window</p>
+<span class="target" id="atmodexplorerapplicationwindow"></span><dl class="class">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow">
+<em class="property">class </em><tt class="descclassname">atmodexplorer.</tt><tt class="descname">AtModExplorerApplicationWindow</tt><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.canvas_clicked">
+<tt class="descname">canvas_clicked</tt><big>(</big><em>event</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow.canvas_clicked"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.canvas_clicked" title="Permalink to this definition">¶</a></dt>
+<dd><p>Event handler for an matplotlib event, instead of a QT event</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.canvas_key_pressed">
+<tt class="descname">canvas_key_pressed</tt><big>(</big><em>event</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow.canvas_key_pressed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.canvas_key_pressed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Event handler for keyboard events while canvas has focus</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.set_aux_comboboxes">
+<tt class="descname">set_aux_comboboxes</tt><big>(</big><em>controlstate</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow.set_aux_comboboxes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.set_aux_comboboxes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the X and Y choosers (QComboBox) for the line plot by reading the controlstate</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.set_comboboxes">
+<tt class="descname">set_comboboxes</tt><big>(</big><em>controlstate</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow.set_comboboxes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.set_comboboxes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets the X, Y, and Z Variable Choosers By reading a canvas controlstate dict</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.set_locations">
+<tt class="descname">set_locations</tt><big>(</big><em>controlstate</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow.set_locations"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.set_locations" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets all location controls to match the controlstate</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.textwrap">
+<tt class="descname">textwrap</tt><em class="property"> = &lt;module 'textwrap' from '/home/liamk/anaconda/lib/python2.7/textwrap.pyc'&gt;</em><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.textwrap" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.AtModExplorerApplicationWindow.update_controls">
+<tt class="descname">update_controls</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#AtModExplorerApplicationWindow.update_controls"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.AtModExplorerApplicationWindow.update_controls" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when the main canvas refreses</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="canvas-classes">
+<h2>Canvas Classes<a class="headerlink" href="#canvas-classes" title="Permalink to this headline">¶</a></h2>
+<p>This subclass (actually it&#8217;s subclasses, mainCanvas and auxCanvas) represent the main &#8216;panels&#8217; on which the GUI can plot</p>
+<span class="target" id="singlemplcanvas"></span><dl class="class">
+<dt id="atmodexplorer.singleMplCanvas">
+<em class="property">class </em><tt class="descclassname">atmodexplorer.</tt><tt class="descname">singleMplCanvas</tt><big>(</big><em>parent=None</em>, <em>appwindow=None</em>, <em>figsize=(5</em>, <em>4)</em>, <em>dpi=200</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas" title="Permalink to this definition">¶</a></dt>
+<dd><p>This is also ultimately a QWidget and a FigureCanvasAgg</p>
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.changed">
+<tt class="descname">changed</tt><big>(</big><em>key=None</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.changed"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.changed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Was a control described by key &#8216;key&#8217; changed since last refresh? If no key, return dictionary of all changed items</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.create_actions">
+<tt class="descname">create_actions</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.create_actions"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.create_actions" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates all QT actions which apply to the canvas</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.init_context_menu">
+<tt class="descname">init_context_menu</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.init_context_menu"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.init_context_menu" title="Permalink to this definition">¶</a></dt>
+<dd><p>Connects a canvas to it&#8217;s context menu callback</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.is_multi">
+<tt class="descname">is_multi</tt><big>(</big><em>coord</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.is_multi"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.is_multi" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convenience function for testing whether the currently selected x or y variables are multiple vars on same axes</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.is_position">
+<tt class="descname">is_position</tt><big>(</big><em>coord</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.is_position"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.is_position" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convenience function for testing whether the currently selected x or y variables are positions</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_altlinechange">
+<tt class="descname">on_altlinechange</tt><big>(</big><em>new_value</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_altlinechange"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_altlinechange" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handles user changing single altitude lineedit widget</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_boundstriggered">
+<tt class="descname">on_boundstriggered</tt><big>(</big><em>xyz</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_boundstriggered"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_boundstriggered" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pop up a modal dialog to change the bounds</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_differencemodetoggled">
+<tt class="descname">on_differencemodetoggled</tt><big>(</big><em>boo</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_differencemodetoggled"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_differencemodetoggled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Catches signals from difference mode checkbox</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_latlinechange">
+<tt class="descname">on_latlinechange</tt><big>(</big><em>new_value</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_latlinechange"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_latlinechange" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handles user changing single latitude lineedit widget</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_logtoggled">
+<tt class="descname">on_logtoggled</tt><big>(</big><em>boo</em>, <em>var</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_logtoggled"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_logtoggled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fancy multi-argument callback (use lambdas in the connect signal call)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_lonlinechange">
+<tt class="descname">on_lonlinechange</tt><big>(</big><em>new_value</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_lonlinechange"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_lonlinechange" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handles user changing single longitude lineedit widget</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_xvarchange">
+<tt class="descname">on_xvarchange</tt><big>(</big><em>new_value</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_xvarchange"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_xvarchange" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handles user changing xvar combo box</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_yvarchange">
+<tt class="descname">on_yvarchange</tt><big>(</big><em>new_value</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_yvarchange"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_yvarchange" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handles user changing yvar combo box</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.on_zvarchange">
+<tt class="descname">on_zvarchange</tt><big>(</big><em>new_value</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.on_zvarchange"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.on_zvarchange" title="Permalink to this definition">¶</a></dt>
+<dd><p>Handles user changing zvar combo box</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.plotProperty">
+<tt class="descname">plotProperty</tt><big>(</big><em>prop</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.plotProperty"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.plotProperty" title="Permalink to this definition">¶</a></dt>
+<dd><p>Simple convenience function to retrieve a property of the current type of plot</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.prepare_model_run">
+<tt class="descname">prepare_model_run</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.prepare_model_run"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.prepare_model_run" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determines which position variables (lat,lon, or alt) are constant,
+given the current settings of the xvar, yvar and zvar. Then reads the 
+approriate values and prepares either flattened gridded input for the 
+ModelRunner or simple 1-d vectors if line plotting</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.refresh">
+<tt class="descname">refresh</tt><big>(</big><em>force_full_refresh=False</em>, <em>force_autoscale=False</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.refresh"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.refresh" title="Permalink to this definition">¶</a></dt>
+<dd><p>Redraws what is on the plot. Trigged on control change</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.reset">
+<tt class="descname">reset</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.reset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.reset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Clears the data handler data</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.singleMplCanvas.set_mplparams">
+<tt class="descname">set_mplparams</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#singleMplCanvas.set_mplparams"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.singleMplCanvas.set_mplparams" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets default visual appearance of the axes</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="plotting-handler-class">
+<h2>Plotting Handler Class<a class="headerlink" href="#plotting-handler-class" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="plotdatahandler"></span><dl class="class">
+<dt id="atmodexplorer.plotDataHandler">
+<em class="property">class </em><tt class="descclassname">atmodexplorer.</tt><tt class="descname">plotDataHandler</tt><big>(</big><em>canvas</em>, <em>plottype='line'</em>, <em>cscale='linear'</em>, <em>mapproj='mill'</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#plotDataHandler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.plotDataHandler" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="model-output-handling-classes">
+<h2>Model Output Handling Classes<a class="headerlink" href="#model-output-handling-classes" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="modelrun"></span><dl class="class">
+<dt id="atmodexplorer.ModelRun">
+<em class="property">class </em><tt class="descclassname">atmodexplorer.</tt><tt class="descname">ModelRun</tt><a class="reference internal" href="_modules/atmodexplorer.html#ModelRun"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.ModelRun" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="method">
+<dt id="atmodexplorer.ModelRun.hold_constant">
+<tt class="descname">hold_constant</tt><big>(</big><em>key</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#ModelRun.hold_constant"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.ModelRun.hold_constant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Holds an ephem variable constant by ensuring it&#8217;s npts is 1s</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.ModelRun.populate">
+<tt class="descname">populate</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#ModelRun.populate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.ModelRun.populate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Populates itself with data</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.ModelRun.set_x">
+<tt class="descname">set_x</tt><big>(</big><em>key</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#ModelRun.set_x"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.ModelRun.set_x" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets an emphem variable as x</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodexplorer.ModelRun.set_y">
+<tt class="descname">set_y</tt><big>(</big><em>key</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#ModelRun.set_y"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.ModelRun.set_y" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets an emphem variable as y</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="msisrun"></span><dl class="class">
+<dt id="atmodexplorer.MsisRun">
+<em class="property">class </em><tt class="descclassname">atmodexplorer.</tt><tt class="descname">MsisRun</tt><a class="reference internal" href="_modules/atmodexplorer.html#MsisRun"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.MsisRun" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class for individual calls to NRLMSISE00</p>
+<dl class="attribute">
+<dt id="atmodexplorer.MsisRun.msispy">
+<tt class="descname">msispy</tt><em class="property"> = &lt;module 'msispy' from '/home/liamk/mirror/Projects/satdraglab/MsisPy/msispy/__init__.pyc'&gt;</em><a class="headerlink" href="#atmodexplorer.MsisRun.msispy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<span class="target" id="modelrunner"></span><dl class="class">
+<dt id="atmodexplorer.ModelRunner">
+<em class="property">class </em><tt class="descclassname">atmodexplorer.</tt><tt class="descname">ModelRunner</tt><big>(</big><em>canvas</em><big>)</big><a class="reference internal" href="_modules/atmodexplorer.html#ModelRunner"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodexplorer.ModelRunner" title="Permalink to this definition">¶</a></dt>
+<dd><p>Makes model calls</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Code Architecture</a><ul>
+<li><a class="reference internal" href="#class-organization">Class Organization</a></li>
+<li><a class="reference internal" href="#qt-application-window">QT Application Window</a></li>
+<li><a class="reference internal" href="#canvas-classes">Canvas Classes</a></li>
+<li><a class="reference internal" href="#plotting-handler-class">Plotting Handler Class</a></li>
+<li><a class="reference internal" href="#model-output-handling-classes">Model Output Handling Classes</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="workflows.html"
+                        title="previous chapter">Workflows</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/architecture.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="workflows.html" title="Workflows"
+             >previous</a> |</li>
+        <li><a href="index.html">AtModExplorer 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Liam Kilcommons.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Workflows &mdash; AtModExplorer 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="AtModExplorer 0.1 documentation" href="index.html" />
+    <link rel="prev" title="Welcome to AtModExplorer’s documentation!" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to AtModExplorer’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">AtModExplorer 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="workflows">
+<h1>Workflows<a class="headerlink" href="#workflows" title="Permalink to this headline">¶</a></h1>
+<p>While the AtModExplorer interface is highly general and should be amenable to many possible applications,
+various common tasks in analyzing model output have been expressly addressed in the design.</p>
+<div class="section" id="viewing-altitude-profiles-for-various-latitudes-and-longitudes">
+<h2>Viewing altitude profiles for various latitudes and longitudes<a class="headerlink" href="#viewing-altitude-profiles-for-various-latitudes-and-longitudes" title="Permalink to this headline">¶</a></h2>
+<p>The default mode of operation for the AtModExplorer is to plot contours over a map projection in the main panel. Clicking on a location on the map will display the altitude profile of the variable being &#8216;contoured&#8217;  in the secondary panel.</p>
+</div>
+<div class="section" id="looking-at-the-change-in-a-variable-caused-by-the-change-in-an-input-parameter">
+<h2>Looking at the change in a variable caused by the change in an input parameter<a class="headerlink" href="#looking-at-the-change-in-a-variable-caused-by-the-change-in-an-input-parameter" title="Permalink to this headline">¶</a></h2>
+<p>The AtModExplorer has a &#8216;memory&#8217; of recent model runs (each run is it&#8217;s own python object) and the &#8216;difference mode&#8217; plots the difference between the selected variable in the most recent and second most recent runs of the model. For example, say that one wished to see how the altitude profile of temperature varied between the equator and the pole. One way to address that question would be to first plot the temperature (as Z/the color variable) versus longitude(X) and altitude(Y) using the &#8216;pseudocolor&#8217; setting for plot-type. The latitude text box would be set to 0 for the first run, and then to 85. Then, entering difference-mode by marking the checkbox would cause the location-by-location difference in temperature it be plotted as the color variable for the pseudocolor plot. This mode works for all plot-types, and is very useful for determining the effect of changing input parameters.</p>
+</div>
+<div class="section" id="plotting-multiple-variables-on-the-same-axes">
+<h2>Plotting multiple variables on the same axes<a class="headerlink" href="#plotting-multiple-variables-on-the-same-axes" title="Permalink to this headline">¶</a></h2>
+<p>AtModExplorer has support for overplotting for 2-d line plots, simply by right clicking on the plot in question and selecting the desired variable from the dropdown &#8216;overplot&#8217; menu. Upon selecting the variable, the plot will automatically refresh and the new variable will be plotted over the original in a different color. The number of variables one can overplot is technically unlimited, but a sensible upper limit for legibility is six to eight.</p>
+</div>
+<div class="section" id="determining-statistics-of-a-variable">
+<h2>Determining statistics of a variable<a class="headerlink" href="#determining-statistics-of-a-variable" title="Permalink to this headline">¶</a></h2>
+<p>One of the menu items available when a user right-clicks on one of the plots is &#8216;statistics&#8217;. Selecting this item will pop up a dialog which displays various statistics about the data being plotted. This is useful when one wishes to know, say, the global average of a variable at a particular altitude. This would be accomplished by first plotting a &#8216;map&#8217; plot-type with color variable of &#8216;temperature&#8217;, setting the altitude text-box to whatever altitude is desired (say, 110 km, for the ionosphere), and then right-clicking on the resulting plot and selecting &#8216;statistics&#8217;.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Workflows</a><ul>
+<li><a class="reference internal" href="#viewing-altitude-profiles-for-various-latitudes-and-longitudes">Viewing altitude profiles for various latitudes and longitudes</a></li>
+<li><a class="reference internal" href="#looking-at-the-change-in-a-variable-caused-by-the-change-in-an-input-parameter">Looking at the change in a variable caused by the change in an input parameter</a></li>
+<li><a class="reference internal" href="#plotting-multiple-variables-on-the-same-axes">Plotting multiple variables on the same axes</a></li>
+<li><a class="reference internal" href="#determining-statistics-of-a-variable">Determining statistics of a variable</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to AtModExplorer&#8217;s documentation!</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/workflows.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to AtModExplorer’s documentation!"
+             >previous</a> |</li>
+        <li><a href="index.html">AtModExplorer 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Liam Kilcommons.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

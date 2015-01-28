@@ -21,7 +21,6 @@ from numpy.distutils.core import setup, Extension
 # This code is covered under the DavitPy license (GPL v3), which is included with this software
 
 #blah.extensionBlah is the way to specify that you want extensionBlah to be a member of package blah
-msisFort = Extension("msispy.msisFort",sources=["msispy/nrlmsise00_sub.for",'msispy/nrlmsis.pyf'])
 
 setup(name='atmodexplorer',
       version = "0.1.0",
@@ -30,9 +29,10 @@ setup(name='atmodexplorer',
       author_email = 'liam.kilcommons@colorado.edu',
       url = "http://github.com/lkilcommons/atmodexplorer",
       download_url = "https://github.com/lkilcommons/atmodexplorer/",
-      long_description = "None yet"
-      install_requires=['msispy','numpy','matplotlib','BaseMap'],
+      long_description = "None yet",
+      install_requires=['numpy','msispy','matplotlib','BaseMap'],
       packages=['atmodexplorer'],
+      scripts=['run_atmodexplorer'],
       package_data={}, #data names must be list
       license='LICENSE.txt',
       zip_safe = False,
