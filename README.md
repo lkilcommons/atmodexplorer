@@ -16,21 +16,29 @@ This tool currently allows users to plot variables such as the mass density, tem
 _Don't, yet. A few more major things need to be addressed. If you're interested in the project, please email me._
 
 On linux systems, (tested so far on Ubuntu 14.04, running the Anaconda python distribution), first ensure you have the following dependancies:
-* Gfortran (sudo apt-get install gfortran)
+* Gfortran (sudo apt-get install gfortran) 
+* [PyQt4](http://www.riverbankcomputing.com/software/pyqt/download) (sudo apt-get install python-qt4)
 * Numpy
 * Matplotlib 
 * Basemap
 * MsisPy - python (f2py wrapper) implementation of NRLMSISE00 __Not yet available. Will be added to PyPI soon__
 
+**All of these dependancies can be satisfied by using the [Anaconda python distribution](http://continuum.io/downloads)**
+ 
 Then:
 ```{sh}
 git clone https://github.com/lkilcommons/atmodexplorer.git
 cd atmodexplorer
-python setup.py build
 python setup.py install
 ```
 
 ### Running the GUI
+Two ways:
+1. From the command line:
+```{sh}
+run_atmodexplorer
+```
+2. From the python interpreter:
 ```{python}
 import atmodexplorer
 atmodexplorer.__init__()
