@@ -860,7 +860,7 @@ class singleMplCanvas(FigureCanvas):
 		#Reset multi plotting if we've changed the plot type
 		if self.changed('plottype') or ffr:
 			pass
-			
+
 		if self.controlstate['run_model_on_refresh'] or ffr:
 			self.prepare_model_run()
 			self.mr.nextrun.populate() #Trigger next model run
@@ -877,7 +877,9 @@ class singleMplCanvas(FigureCanvas):
 		#print '%s:%s' % (self.controlstate['zvar'],repr(zlims))
 		
 		#Reset the bounds, multiplotting and turn of log scaling if we have changed any variables or switched on or off of difference mode
-		if self.changed('xvar') or self.changed('yvar') or self.changed('zvar') or self.changed('differencemode') or ffr or fauto:
+		if (self.changed('xvar') and not self.controlstate['xmulti']) or \
+			(self.changed('yvar') and not self.controlstate['ymulti']) or \
+			 self.changed('zvar') or self.changed('differencemode') or ffr:
 			self.controlstate['xbounds'] = xlims
 			self.controlstate['ybounds'] = ylims
 			self.controlstate['zbounds'] = zlims
@@ -887,6 +889,11 @@ class singleMplCanvas(FigureCanvas):
 			self.controlstate['xmulti']=False
 			self.controlstate['ymulti']=False
 
+		if fauto: #Only rescale
+			self.controlstate['xbounds'] = xlims
+			self.controlstate['ybounds'] = ylims
+			self.controlstate['zbounds'] = zlims
+			
 		#Associate data in the data handler based on what variables are desired
 		if self.changed('xvar') or self.changed('xbounds') or self.changed('xlog') or self.controlstate['run_model_on_refresh'] or ffr: 
 			xname = self.controlstate['xvar']
@@ -958,11 +965,12 @@ class singleMplCanvas(FigureCanvas):
 		self.connect(self.actions['difference'],SIGNAL("toggled(bool)"),self,SLOT('on_differencemodetoggled(bool)'))
 
 	def make_multi(self,coord,var):
+			self.controlstate[coord+'multi']=True
 			if not hasattr(self.controlstate[coord+'var'],'__iter__'):
 				self.controlstate[coord+'var'] = [self.controlstate[coord+'var'],var]
-				self.controlstate[coord+'multi']=True
 			else:
 				self.controlstate[coord+'var'].append(var)
+			logging.info('Now setting %s to multi for variable %s' % (coord,var))
 			self.refresh(force_autoscale=True)
 
 	#Event handlers
