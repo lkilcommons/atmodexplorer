@@ -12,8 +12,8 @@ Contents:
    :maxdepth: 2
 
    workflows.rst
-   architecture.rst
-
+   arch_qtfrontend.rst
+   arch_backend.rst
 
 Indices and tables
 ==================

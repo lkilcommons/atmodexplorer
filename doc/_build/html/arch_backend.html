@@ -1,0 +1,340 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Data Management and Plotting &mdash; AtModExplorer 0.1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0.1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="AtModExplorer 0.1 documentation" href="index.html" />
+    <link rel="prev" title="PyQT4 Frontend" href="arch_qtfrontend.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="arch_qtfrontend.html" title="PyQT4 Frontend"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">AtModExplorer 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="data-management-and-plotting">
+<h1>Data Management and Plotting<a class="headerlink" href="#data-management-and-plotting" title="Permalink to this headline">¶</a></h1>
+<p>The classes which handle running models, storing the output and plotting the user&#8217;s desired info are completely independent of the GUI.</p>
+<p>The model class <a class="reference internal" href="#modelrun">ModelRun</a> is a general one-instance-per-run superclass, which is then subclassed for different models, such as <a class="reference internal" href="#msisrun">MSISRun</a> or <a class="reference internal" href="#hwmrun">HWMRun</a>. This architecture allows serveral interesting behaviors.
+* Peering: One <a class="reference internal" href="#modelrun">ModelRun</a> subclasses can be <em>peered</em> to another (one way, if A is peered to B, B is not nessecarily peered to A), which by default differences any common variable that the user calls for using the <tt class="docutils literal"><span class="pre">__getitem__</span></tt> magic method. An example of when this is useful is when the user has run a model for two different days over a global grid, and wishes to see which localle experienced the greatest change in a particular variable.
+* History: By keeping <a class="reference internal" href="#modelrun">ModelRun</a> instances in a list, the <a class="reference internal" href="#modelrunner">ModelRunner</a> class can maintain a history of recent runs, and recall any one of them at need.</p>
+<div class="section" id="plotting-handler-class">
+<h2>Plotting Handler Class<a class="headerlink" href="#plotting-handler-class" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="plotdatahandler"></span><dl class="class">
+<dt id="atmodbackend.PlotDataHandler">
+<em class="property">class </em><tt class="descclassname">atmodbackend.</tt><tt class="descname">PlotDataHandler</tt><big>(</big><em>canvas</em>, <em>plottype='line'</em>, <em>cscale='linear'</em>, <em>mapproj='mill'</em><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#PlotDataHandler"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.PlotDataHandler" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="model-output-handling-classes">
+<h2>Model Output Handling Classes<a class="headerlink" href="#model-output-handling-classes" title="Permalink to this headline">¶</a></h2>
+<span class="target" id="modelrun"></span><dl class="class">
+<dt id="atmodbackend.ModelRun">
+<em class="property">class </em><tt class="descclassname">atmodbackend.</tt><tt class="descname">ModelRun</tt><a class="reference internal" href="_modules/atmodbackend.html#ModelRun"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRun" title="Permalink to this definition">¶</a></dt>
+<dd><p>The ModelRun class is a generic class for individual calls to atmospheric models.</p>
+<p>The idea is to have individual model classes subclass this one, and add their specific
+run code to the &#8216;populate method&#8217;.</p>
+<p><strong>The assumptions are:</strong></p>
+<ul class="simple">
+<li>All atmospheric models take as input latitude, longitude and altitude</li>
+<li>User will want data on a 2-d rectangular grid or as column arrays</li>
+</ul>
+<p><strong>The parameters used:</strong></p>
+<ul>
+<li><dl class="first docutils">
+<dt><strong>xkey</strong> - string or None</dt>
+<dd><p class="first last">The key into vars,lims, and npts for the variable that represents the 1st dimension of the desired output (x-axis)</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><strong>ykey</strong> - string or None</dt>
+<dd><p class="first last">The key into vars,lims, and npts for the variable that represents the 2nd dimension of the desired output (y-axis)</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><strong>vars</strong> - an OrderedDict (Ordered because it&#8217;s possible user will always want to iterate in a predetermined order over it&#8217;s keys)</dt>
+<dd><ol class="first last arabic simple">
+<li>The keys of vars are the names of the data stored in it&#8217;s values.</li>
+<li>vars always starts with keys &#8216;Latitude&#8217;,&#8217;Longitude&#8217;, and &#8216;Altitude&#8217;</li>
+</ol>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><strong>lims</strong> - an OrderedDict</dt>
+<dd><p class="first last">The range [smallest,largest] of a particular variable that will be used determine:
+#. The range of values of the independant variables (i.e. Latitude, Longitude or Altitude) the model will generate results format
+#. The range of values the user could expect a particular output variable to have (i.e to set axes bounds)</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><strong>npts</strong> - an OrderedDict</dt>
+<dd><p class="first last">#. The number of distinct values between the associated lims of particular input variable that will be passed to the model
+i.e. (how the grid of input locations will be shaped and how big it will be)</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><strong>drivers</strong> - a Dictionary</dt>
+<dd><p class="first last">Additional inputs that will be passed to the model (using <a href="#id1"><span class="problematic" id="id2">**</span></a>self.drivers in the model call).
+Inititialized to empty, set via the subclass</p>
+</dd>
+</dl>
+</li>
+</ul>
+<dl class="docutils">
+<dt>Subclass best practices:</dt>
+<dd><ul class="first last">
+<li><dl class="first docutils">
+<dt>In the subclass __init__ method, after calling the superclass <strong>__init__</strong> method, the user should:</dt>
+<dd><ul class="first last simple">
+<li>Set any keys in the self.drivers dict that will then be passed a keyword arguments to the model wrapper</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>In the populate method, after calling the superclass <strong>populate</strong> method, the user should:</dt>
+<dd><ul class="first simple">
+<li>Call the model using the flattened latitude, longitude, and altitude arrays prepared in the superclass method,</li>
+</ul>
+<p class="last">and pass the drivers dict as keyword arguments.</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+<p><strong>Example for horizontal wind model subclass:</strong></p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c">#This syntax allows for multiple inheritance,</span>
+        <span class="c">#we don&#39;t use it, but it&#39;s good practice to use this </span>
+        <span class="c">#instead of ModelRun.__init__()</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">HWMRun</span><span class="p">,</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">()</span>
+        <span class="c">#ap - float</span>
+        <span class="c">#       daily AP magnetic index</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">drivers</span><span class="p">[</span><span class="s">&#39;dt&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span><span class="mi">6</span><span class="p">,</span><span class="mi">21</span><span class="p">,</span><span class="mi">12</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">drivers</span><span class="p">[</span><span class="s">&#39;ap&#39;</span><span class="p">]</span><span class="o">=</span><span class="bp">None</span>
+
+<span class="k">def</span> <span class="nf">populate</span><span class="p">():</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">HWMRun</span><span class="p">,</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">populate</span><span class="p">()</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">winds</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">drivers</span> <span class="o">=</span> <span class="n">hwmpy</span><span class="o">.</span><span class="n">hwm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">flatlat</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">flatlon</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">flatalt</span><span class="p">,</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">drivers</span><span class="p">)</span>
+        
+        <span class="c">#Now add all the zonal and meridional winds to the dictionary</span>
+        <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">winds</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">vars</span><span class="p">[</span><span class="n">w</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">winds</span><span class="p">[</span><span class="n">w</span><span class="p">]</span>
+
+        <span class="c">#Now make everything into the appropriate shape, if were</span>
+        <span class="c">#expecting grids. Otherwise make everything into a column vector</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">npts</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
+                
+        <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">vars</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">vars</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vars</span><span class="p">[</span><span class="n">v</span><span class="p">],</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">v</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;Latitude&#39;</span><span class="p">,</span><span class="s">&#39;Longitude&#39;</span><span class="p">,</span><span class="s">&#39;Altitude&#39;</span><span class="p">]:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">lims</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vars</span><span class="p">[</span><span class="n">v</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()),</span><span class="n">np</span><span class="o">.</span><span class="n">nanmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vars</span><span class="p">[</span><span class="n">v</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">())]</span>
+</pre></div>
+</div>
+<dl class="docutils">
+<dt><strong>Operation works like this:</strong></dt>
+<dd><ul class="first simple">
+<li>Assume that we have a model run subclass call MyModel</li>
+<li>Assume we have an instance of MyModel called mm</li>
+</ul>
+<ol class="last arabic">
+<li><dl class="first docutils">
+<dt>User (or calling method) decides that they want:</dt>
+<dd><ul class="first last simple">
+<li>To plot a GLOBAL grid at an altitude of 110km that is Latitude (50 pts) vs. Longitude (75 pts) vs. Model output</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p class="first">They set mm.npts[&#8216;Latitude&#8217;]=50 and mm.npts[&#8216;Longitude&#8217;]=75 to tell the object what the size of the grid is</p>
+</li>
+<li><p class="first">They call mm.set_x(&#8216;Latitude&#8217;), and mm.set_y(&#8216;Longitude&#8217;) to set which dimensions correspond to which variables</p>
+</li>
+<li><p class="first">Since the model also requires an altitude value, they must set mm.vars[&#8216;Altitude&#8217;]=110</p>
+</li>
+<li><p class="first">Since they want the grid to be global they set mm.lims[&#8216;Latitude&#8217;]=[-90.,90.] and mm.lims[&#8216;Longitude&#8217;]=[-180.,180.]</p>
+</li>
+<li><p class="first">Then they call mm.populate() to call the model for their desired grid</p>
+</li>
+</ol>
+</dd>
+<dt><strong>Calling:</strong></dt>
+<dd><ul class="first last">
+<li><dl class="first docutils">
+<dt>Getting a value from the ModelRun instance as if it were a dictionary i.e. mm[&#8216;Latitude&#8217;], returns data,limits for </dt>
+<dd><p class="first last">the variable &#8216;Latitude&#8217;. Handles differencing any non position variables with another ModelRun instance at mm.peer if mm.peer is not None</p>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+<dt><strong>Peering:</strong></dt>
+<dd><ul class="first simple">
+<li>the peer parameter can be set to another ModelRun instance to return difference between variables in two runs</li>
+</ul>
+<p class="last">TODO: Document peering</p>
+</dd>
+</dl>
+<dl class="method">
+<dt id="atmodbackend.ModelRun.finalize">
+<tt class="descname">finalize</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#ModelRun.finalize"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRun.finalize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Call after populate to finish shaping the data and filling the lims dict</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodbackend.ModelRun.hold_constant">
+<tt class="descname">hold_constant</tt><big>(</big><em>key</em><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#ModelRun.hold_constant"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRun.hold_constant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Holds an ephem variable constant by ensuring it&#8217;s npts is 1s</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodbackend.ModelRun.populate">
+<tt class="descname">populate</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#ModelRun.populate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRun.populate" title="Permalink to this definition">¶</a></dt>
+<dd><p>Populates itself with data</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodbackend.ModelRun.set_x">
+<tt class="descname">set_x</tt><big>(</big><em>key</em><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#ModelRun.set_x"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRun.set_x" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets an emphem variable as x</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="atmodbackend.ModelRun.set_y">
+<tt class="descname">set_y</tt><big>(</big><em>key</em><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#ModelRun.set_y"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRun.set_y" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets an emphem variable as y</p>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="msisrun"></span><dl class="class">
+<dt id="atmodbackend.MsisRun">
+<em class="property">class </em><tt class="descclassname">atmodbackend.</tt><tt class="descname">MsisRun</tt><a class="reference internal" href="_modules/atmodbackend.html#MsisRun"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.MsisRun" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class for individual calls to NRLMSISE00</p>
+<dl class="attribute">
+<dt id="atmodbackend.MsisRun.msispy">
+<tt class="descname">msispy</tt><em class="property"> = &lt;module 'msispy' from '/home/liamk/mirror/Projects/satdraglab/MsisPy/msispy/__init__.pyc'&gt;</em><a class="headerlink" href="#atmodbackend.MsisRun.msispy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<span class="target" id="hwmrun"></span><dl class="class">
+<dt id="atmodbackend.HWMRun">
+<em class="property">class </em><tt class="descclassname">atmodbackend.</tt><tt class="descname">HWMRun</tt><a class="reference internal" href="_modules/atmodbackend.html#HWMRun"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.HWMRun" title="Permalink to this definition">¶</a></dt>
+<dd><p>Class for individual calls to HWM</p>
+<dl class="attribute">
+<dt id="atmodbackend.HWMRun.hwmpy">
+<tt class="descname">hwmpy</tt><em class="property"> = &lt;module 'hwmpy' from '/home/liamk/mirror/Projects/satdraglab/HWMPy/hwmpy/__init__.pyc'&gt;</em><a class="headerlink" href="#atmodbackend.HWMRun.hwmpy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<span class="target" id="modelrunner"></span><dl class="class">
+<dt id="atmodbackend.ModelRunner">
+<em class="property">class </em><tt class="descclassname">atmodbackend.</tt><tt class="descname">ModelRunner</tt><big>(</big><em>canvas=None</em>, <em>model='msis'</em><big>)</big><a class="reference internal" href="_modules/atmodbackend.html#ModelRunner"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#atmodbackend.ModelRunner" title="Permalink to this definition">¶</a></dt>
+<dd><p>Makes model calls</p>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">Data Management and Plotting</a><ul>
+<li><a class="reference internal" href="#plotting-handler-class">Plotting Handler Class</a></li>
+<li><a class="reference internal" href="#model-output-handling-classes">Model Output Handling Classes</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="arch_qtfrontend.html"
+                        title="previous chapter">PyQT4 Frontend</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/arch_backend.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="arch_qtfrontend.html" title="PyQT4 Frontend"
+             >previous</a> |</li>
+        <li><a href="index.html">AtModExplorer 0.1 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Liam Kilcommons.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>
