@@ -130,6 +130,7 @@ class ModelRun(object):
 		#if only one is > 1, then we do vectors
 		#
 		self.modelname = None
+		self.log = logging.getLogger(__name__)
 
 		#Determines grid shape
 		self.xkey = None
@@ -155,7 +156,16 @@ class ModelRun(object):
 		self.lims['Latitude']=[-90.,90.]
 		self.lims['Longitude']=[-180.,180.]
 		self.lims['Altitude']=[0.,400.]
-		
+
+		#the bounds dictionary is very similar to the lims, but it is NOT TO BE MODIFIED
+		#by any outside objects. It records the max and min values of every variable and is 
+		#set when the finalize method is called. The reason it is included at all is so that
+		#if the user (or another method) changes the lims, we can revert back to something if they
+		#want that.
+		self.bounds = OrderedDict()
+		for k in self.lims:
+			self.bounds[k] = self.lims[k]
+
 		#The drivers dictionary take input about whatever solar wind parameters drive the model
 		#These must be either scalars (floats) or lists.
 		#The keys to this dict must be keyword argument names in the model call 
@@ -165,8 +175,20 @@ class ModelRun(object):
 		self.totalpts = None #Tells how many total points
 		self.peer = None #Can be either None, or another ModelRun, allows for comparing two runs
 
+	def autoscale_all_lims(self):
+		for key in self.lims:
+			self.autoscale_lims(key)
+			
+	def autoscale_lims(self,key):
+		if key in self.lims and key in self.bounds:
+			self.log.info("Restoring original bounds (was %s, now %s) for %s" % (str(self.lims[key]),str(self.bounds[key]),key))
+			self.lims[key] = self.bounds[key]
+		else:
+			raise ValueError("Key %s is not a valid model run variable" % (key))
+
 	def hold_constant(self,key):
 		"""Holds an ephem variable constant by ensuring it's npts is 1s"""
+		self.log.info("Holding %s constant" % (key))
 		if key in ['Latitude','Longitude','Altitude']:
 			self.npts[key] = 1
 		else:
@@ -174,6 +196,7 @@ class ModelRun(object):
 
 	def set_x(self,key):
 		"""Sets an emphem variable as x"""
+		self.log.info("X is now %s" % (key)) 
 		if key in ['Latitude','Longitude','Altitude']:
 			self.xkey = key
 		else:
@@ -181,6 +204,7 @@ class ModelRun(object):
 
 	def set_y(self,key):
 		"""Sets an emphem variable as y"""
+		self.log.info("Y is now %s" % (key))
 		if key in ['Latitude','Longitude','Altitude']:
 			self.ykey = key
 		else:
@@ -192,7 +216,8 @@ class ModelRun(object):
 	def populate(self):
 		"""Populates itself with data"""
 		#Make sure that everything has the same shape (i.e. either a grid or a vector of length self.npts)
-
+		self.log.info("Now populating model run") 
+		
 		#Count up the number of independant variables
 		nindependent=0
 		for key in self.npts:
@@ -238,9 +263,11 @@ class ModelRun(object):
 			
 		for v in self.vars:
 			self.vars[v] = np.reshape(self.vars[v],self.shape)
-			if v not in ['Latitude','Longitude','Altitude']:
+			self.bounds[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
+			if v not in ['Latitude','Longitude','Altitude']: #Why do we do this again? Why not the positions?
 				self.lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
-
+			
+			
 	def __str__(self):
 		"""
 		Gives a description of the model settings used to make this run
@@ -265,6 +292,7 @@ class ModelRun(object):
 	def __getitem__(self,key):
 		"""Easy syntax for returning data"""
 		if hasattr(key, '__iter__'): #If key is a sequence of some kind
+			self.log.debug("Getting multiple variables/limits %s" % (str(key)))
 			var = []
 			lim = []
 			for k in key:
@@ -274,10 +302,11 @@ class ModelRun(object):
 			return var,lim
 		else:
 			if self.peer is None:
+				self.log.debug("Getting variables/limits for %s" % (key))
 				return self.vars[key],self.lims[key]
 			else:
 				if key not in ['Latitude','Longitude','Altitude']:
-					logging.info( "Entering difference mode for var %s" % (key))
+					self.log.info( "Entering difference mode for var %s" % (key))
 					#Doesn't make sense to difference locations
 					mydata,mylims = self.vars[key],self.lims[key]
 					peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
@@ -301,6 +330,9 @@ class HWMRun(ModelRun):
 		#MSIS DRIVERS
 		#ap - float
 		#	daily AP magnetic index
+		#Overwrite the superclass logger
+		self.log = getLogger(__name__)
+		
 		self.modelname = "Horizontal Wind Model 07 (HWM07)"
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
 		self.drivers['ap']=None
@@ -309,8 +341,8 @@ class HWMRun(ModelRun):
 
 		super(HWMRun,self).populate()
 		
-		logging.info( "Now runing HWM07 for %s...\n" % (self.drivers['dt'].strftime('%c')))
-		logging.info( "Driver dict is %s\n" % (str(self.drivers)))
+		self.log.info( "Now runing HWM07 for %s...\n" % (self.drivers['dt'].strftime('%c')))
+		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
 		self.winds,self.drivers = hwmpy.hwm(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
 		
@@ -354,6 +386,9 @@ class MsisRun(ModelRun):
 		#apa3657 
 		#	Average of eight 3 hour AP indices from 36 to 57 hours prior to current time
 
+		#Overwrite the superclass logger
+		self.log = logging.getLogger(__name__)
+
 		self.modelname = "NRLMSISE00"
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
 		self.drivers['f107']=None
@@ -364,8 +399,8 @@ class MsisRun(ModelRun):
 
 		super(MsisRun,self).populate()
 		
-		logging.info( "Now runing NRLMSISE00 for %s...\n" % (self.drivers['dt'].strftime('%c')))
-		logging.info( "Driver dict is %s\n" % (str(self.drivers)))
+		self.log.info( "Now runing NRLMSISE00 for %s...\n" % (self.drivers['dt'].strftime('%c')))
+		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
 		self.species,self.t_exo,self.t_alt,self.drivers = msispy.msis(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
 		
@@ -383,6 +418,7 @@ class MsisRun(ModelRun):
 class ModelRunner(object):
 	""" Makes model calls """
 	def __init__(self,canvas=None,model="msis"):
+		self.log = logging.getLogger(__name__)
 		
 		self.cv = canvas
 		self.model = model
@@ -396,11 +432,22 @@ class ModelRunner(object):
 		#Set counters
 		self.n_total_runs=0
 		self.n_max_runs=10
-		
+		self._lastind=-1 #The index of the current 'previous' model
+
 		self._differencemode = False # Init the property
 
 		#Create the dictionary that stores the settings for the next run
-		
+	@property
+	def lastind(self):
+		return self._lastind
+
+	@lastind.setter
+	def lastind(self, value):
+		if self.lastind < 0 and self.lastind >= -1*len(self.runs):
+			self._lastind = value
+		else:
+			self.log.warn("Attempted to set model history index to %s, which is invalid." % ( str(value)))
+	
 	def init_nextrun(self):
 		if self.model.lower() == 'msis':
 			self.nextrun = MsisRun()
@@ -421,16 +468,16 @@ class ModelRunner(object):
 				run.peer = None
 
 		self.n_total_runs+=1
-		logging.info( "Model run number %d added." % (self.n_total_runs))
+		self.log.info( "Model run number %d added." % (self.n_total_runs))
 		if len(self.runs)>self.n_max_runs:
 			del self.runs[0]
-			logging.info( "Exceeded total number of stored runs %d. Run %d removed" %(self.n_max_runs,self.n_total_runs-self.n_max_runs))
+			self.log.info( "Exceeded total number of stored runs %d. Run %d removed" %(self.n_max_runs,self.n_total_runs-self.n_max_runs))
 
 	#Implement a simple interface for retrieving data, which is opaque to whether or now we're differencing
 	#or which model we're using
 	def __getitem__(self,key):
 		"""Shorthand for self.runs[-1][key], which returns self.runs[-1].vars[key],self.runs[-1].lims[key]"""
-		return self.runs[-1][key]
+		return self.runs[self.lastind][key]
 
 	def __setitem__(self,key,value):
 		"""Shorthand for self.nextrun[key]=value"""
@@ -443,21 +490,29 @@ class ModelRunner(object):
 
 	@differencemode.setter
 	def differencemode(self, boo):
-		logging.info( "Difference mode is now %s" % (str(boo)))
+		self.log.info( "Difference mode is now %s" % (str(boo)))
 		if boo:
 			self.nextrun.peer = self.runs[-1]
 		else:
 			self.nextrun.peer = None
+
 		self._differencemode = boo
 		
 
 class PlotDataHandler(object):
-	def __init__(self,canvas,plottype='line',cscale='linear',mapproj='mill'):
+	def __init__(self,canvas,controlstate=None,plottype='line',cscale='linear',mapproj='mill'):
 		"""
 		Takes a singleMplCanvas instance to associate with
 		and plot on
 		"""
 		self.canvas = canvas
+		self.log = logging.getLogger(__name__)
+		if controlstate is None:
+			self.controlstate = canvas.controlstate #This is for atmodexplorer, where there's only one controlstate 
+			#and it's associated with the canvas
+		else:
+			self.controlstate = controlstate # This is for atmodweb, where the controlstate is associated with the synchronizer
+
 		self.fig = canvas.fig
 		self.ax = canvas.ax
 		self.axpos = canvas.ax.get_position()
@@ -496,6 +551,7 @@ class PlotDataHandler(object):
 		return cap
 			
 	def clear_data(self):
+		self.log.info("Clearing PlotDataHandler data NOW.")
 		self.x,self.y,self.z = None,None,None #must be np.array
 		self.xname,self.yname,self.zname = None,None,None #must be string
 		self.xbounds,self.ybounds,self.zbounds = None,None,None #must be 2 element tuple
@@ -595,7 +651,7 @@ class PlotDataHandler(object):
 		else:
 			return np.nan
 		#a little hack to get the altitude
-		alt = self.canvas.controlstate['alt']
+		alt = self.controlstate['alt']
 		r_km = 6371.2+alt
 
 		zee = self.z.flatten()
@@ -608,8 +664,6 @@ class PlotDataHandler(object):
 		return zint
 
 	def plot(self,*args,**kwargs):
-		
-
 
 		if self.map is not None:
 			self.map = None #Make sure that we don't leave any maps lying around if we're not plotting maps
@@ -621,10 +675,12 @@ class PlotDataHandler(object):
 		#	print "%d: %s" % (i,str(a.get_position()))
 		
 		if self.statistics is None:
+			self.log.debug("Computing statistics")
 			self.compute_statistics()
 
 		if self.cb is not None:
-			#logging.info("removing self.cb:%s\n" % (str(self.cb.ax.get_position())))
+			#logging.info("removing self.cb:%s\n" % (str(self.cb.ax.get_position()))
+			self.log.debug("Removing self.cb")
 			self.cb.remove()
 			self.cb = None
 
@@ -635,6 +691,7 @@ class PlotDataHandler(object):
 		#self.zbounds = (np.nanmin(self.z),np.nanmax(self.z))
 		
 		if self.zlog:
+			self.log.debug("Z var set to use log scale")
 			self.z[self.z<=0.] = np.nan
 			norm = LogNorm(vmin=self.zbounds[0],vmax=self.zbounds[1]) 
 			locator = ticker.LogLocator()
@@ -643,6 +700,8 @@ class PlotDataHandler(object):
 			norm = Normalize(vmin=self.zbounds[0],vmax=self.zbounds[1])
 	
 		if self.plottype == 'line':
+			self.log.debug("Plottype is line")
+			
 			#Plot a simple 2d line plot
 			if self.cb is not None:
 				self.cb.remove()
@@ -650,6 +709,8 @@ class PlotDataHandler(object):
 				#self.ax.set_position(self.axpos)
 
 			if not self.xmulti and not self.ymulti: #No overplotting
+				
+				self.log.debug("No multiplotting is requested: X var %s, Y var %s" % (str(self.xname),str(self.yname)))
 				self.ax.plot(self.x,self.y,*args,**kwargs)
 				xbnds = self.xbounds
 				ybnds = self.ybounds
@@ -657,7 +718,8 @@ class PlotDataHandler(object):
 				ynm = self.yname
 
 			elif self.xmulti and not self.ymulti: #Overplotting xvars
-			
+				
+				self.log.debug("X multiplotting is requested: X vars %s, Y var %s" % (str(self.xname),str(self.yname)))
 				xbnds = self.xbounds[0]
 				ybnds = self.ybounds
 				xnm = ''
@@ -677,6 +739,8 @@ class PlotDataHandler(object):
 					xbnds[1] = xbnds[1] if xbnds[1]>self.xbounds[i][1] else self.xbounds[i][1]
 
 			elif self.ymulti and not self.xmulti: #Overplotting yvars
+
+				self.log.debug("Y multiplotting is requested: X var %s, Y vars %s" % (str(self.xname),str(self.yname)))
 				ybnds = self.ybounds[0]
 				xbnds = self.xbounds
 				xnm = self.xname
@@ -700,14 +764,16 @@ class PlotDataHandler(object):
 				self.ax.get_xaxis().get_major_formatter().labelOnlyBase = False
 				
 			self.ax.set_xlim(xbnds)
-			
+			self.log.debug("Setting bounds for X var %s, %s" % (str(self.xname),str(xbnds)))
+				
 			self.ax.set_ylabel(ynm)
 			if self.ylog:
 				self.ax.set_yscale('log',nonposx='clip')
 				self.ax.get_yaxis().get_major_formatter().labelOnlyBase = False
 				
 			self.ax.set_ylim(ybnds)
-			
+			self.log.debug("Setting bounds for Y var %s, %s" % (str(self.yname),str(ybnds)))
+
 			if self.xmulti or self.ymulti:
 				self.ax.legend()
 
@@ -724,7 +790,9 @@ class PlotDataHandler(object):
 			#	print "Tight layout for line failed"
 		
 		elif self.plottype == 'pcolor':
-			
+			self.log.info("Plottype is pcolor for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.xname),str(self.xbounds),
+				str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
+
 			mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
 			#m.draw()
 
@@ -741,7 +809,6 @@ class PlotDataHandler(object):
 			
 			if self.zlog: #Locator goes to ticks argument
 				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter,ticks=locator)
-
 			else:
 				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
 
@@ -756,6 +823,9 @@ class PlotDataHandler(object):
 				self.zname if not self.zlog else 'log(%s)'%self.zname))
 			
 		elif self.plottype == 'map':
+			self.log.info("Plottype is %s projection MAP for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.mapproj),str(self.xname),str(self.xbounds),
+				str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
+
 			if self.mapproj=='moll':
 				m = Basemap(projection=self.mapproj,llcrnrlat=int(self.ybounds[0]),urcrnrlat=int(self.ybounds[1]),\
 					llcrnrlon=int(self.xbounds[0]),urcrnrlon=int(self.xbounds[1]),lat_ts=20,resolution='c',ax=self.ax,lon_0=0.)
@@ -763,8 +833,8 @@ class PlotDataHandler(object):
 				m = Basemap(projection=self.mapproj,llcrnrlat=int(self.ybounds[0]),urcrnrlat=int(self.ybounds[1]),\
 					llcrnrlon=int(self.xbounds[0]),urcrnrlon=int(self.xbounds[1]),lat_ts=20,resolution='c',ax=self.ax)
 			elif self.mapproj=='ortho':
-				m = Basemap(projection='ortho',ax=self.ax,lat_0=int(self.canvas.controlstate['lat']),
-					lon_0=int(self.canvas.controlstate['lon']),resolution='l')
+				m = Basemap(projection='ortho',ax=self.ax,lat_0=int(self.controlstate['lat']),
+					lon_0=int(self.controlstate['lon']),resolution='l')
 			
 			m.drawcoastlines(linewidth=self.map_lw)
 
