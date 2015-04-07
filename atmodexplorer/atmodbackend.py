@@ -130,7 +130,7 @@ class ModelRun(object):
 		#if only one is > 1, then we do vectors
 		#
 		self.modelname = None
-		self.log = logging.getLogger(__name__)
+		self.log = logging.getLogger(self.__class__.__name__)
 
 		#Determines grid shape
 		self.xkey = None
@@ -387,7 +387,7 @@ class MsisRun(ModelRun):
 		#	Average of eight 3 hour AP indices from 36 to 57 hours prior to current time
 
 		#Overwrite the superclass logger
-		self.log = logging.getLogger(__name__)
+		self.log = logging.getLogger(self.__class__.__name__)
 
 		self.modelname = "NRLMSISE00"
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
@@ -418,7 +418,7 @@ class MsisRun(ModelRun):
 class ModelRunner(object):
 	""" Makes model calls """
 	def __init__(self,canvas=None,model="msis"):
-		self.log = logging.getLogger(__name__)
+		self.log = logging.getLogger(self.__class__.__name__)
 		
 		self.cv = canvas
 		self.model = model
@@ -506,7 +506,7 @@ class PlotDataHandler(object):
 		and plot on
 		"""
 		self.canvas = canvas
-		self.log = logging.getLogger(__name__)
+		self.log = logging.getLogger(self.__class__.__name__)
 		if controlstate is None:
 			self.controlstate = canvas.controlstate #This is for atmodexplorer, where there's only one controlstate 
 			#and it's associated with the canvas
