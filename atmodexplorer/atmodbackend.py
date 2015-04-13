@@ -65,12 +65,12 @@ class ModelRunOD(OrderedDict):
 					raise RuntimeError("Nonsensical value in range_correct for index %d of %s: %s, allowed range is %s" % (int(k),key,str(val),str(self.allowed_range[key])))
 		else: #assume it's a scalar value
 			if val > self.allowed_range[key][1]:
-				self.log.warn("Attempting to set key %s to a value greater than allowed [%.3f]."+\
-						"setting to max allowed [%.3f]" % (k,key,val,self.allowed_range[key][1]))
+				self.log.warn("Attempting to set key %s to a value greater than allowed [%s]."+\
+						"setting to max allowed [%.3f]" % (k,key,val,str(self.allowed_range[key][1])))
 				val = self.allowed_range[key][1]
 			elif val < self.allowed_range[key][0]:
-				self.log.warn("Attempting to set key %s to a value greater than allowed [%.3f]."+\
-						"setting to min allowed [%.3f]" % (key,val,self.allowed_range[key][0]))
+				self.log.warn("Attempting to set key %s to a value greater than allowed [%s]."+\
+						"setting to min allowed [%.3f]" % (key,val,str(self.allowed_range[key][0])))
 				val = self.allowed_range[key][0]
 			elif val >= self.allowed_range[key][0] and val <= self.allowed_range[key][1]:
 				pass
@@ -510,7 +510,7 @@ class MsisRun(ModelRun):
 
 		self.drivers['f107']=None
 		self.drivers.allowed_range['f107'] = [0.,350.]
-		self.drivers.units['f107'] = '10^-22 W/m2/Hz'
+		self.drivers.units['f107'] = 'SFU'
 
 		self.drivers['ap_daily']=None
 		self.drivers.allowed_range['ap_daily'] = [0.,400.]
@@ -518,7 +518,7 @@ class MsisRun(ModelRun):
 		
 		self.drivers['f107a']=None
 		self.drivers.allowed_range['f107'] = [0.,350.]
-		self.drivers.units['f107'] = '10^-22 W/m2/Hz'
+		self.drivers.units['f107a'] = 'SFU' #10^-22 W/m2/Hz'
 
 	def populate(self):
 
