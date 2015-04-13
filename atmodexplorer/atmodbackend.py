@@ -26,6 +26,107 @@ from collections import OrderedDict
 import logging
 logging.basicConfig(level=logging.INFO)
 
+class ModelRunOD(OrderedDict):
+	"""
+	OrderedDict subclass for storing values for variables and drivers. It also stores an additional dict of units for each driver,
+	and allowed values for each driver
+	"""
+	def __init__(self):
+		super(ModelRunOD,self).__init__()
+		self.log = logging.getLogger(self.__class__.__name__)
+		self.descriptions = dict()
+		self.units = dict()
+		self.allowed_range = dict()
+
+	def range_correct(self,key,val):
+		"""Check that the value about to be set at key, is within the specified allowed_range for that key"""
+		if isinstance(val,np.ndarray):
+			outrange = np.logical_or(val < float(self.allowed_range[key][0]),val > float(self.allowed_range[key][1]))
+			val[outrange] = np.nan
+			if np.flatnonzero(outrange).shape[0] > 1:
+				self.log.debug("%d values were out of range for key %s allowed_range=(%.3f-%.3f)" %(np.flatnonzero(outrange).shape[0],
+					key,self.allowed_range[key][0],self.allowed_range[key][1]))
+			else:
+				self.log.debug("No values were out of range for key %s" % (key))
+		elif isinstance(val,list):
+			for k in range(len(val)):
+				v = val[k]
+				if v > self.allowed_range[key][1]:
+					self.log.warn("Attempting to set %dth element of key %s to a value greater than allowed [%s]. setting to max allowed [%s]" % (k,
+						key,str(v),str(self.allowed_range[key][1])))
+					val[k] = self.allowed_range[key][1]
+				elif v < self.allowed_range[key][0]:
+					self.log.warn("Attempting to set %dth element of key %s to a value greater than allowed [%s] set to min allowed [%s]" % (k,
+						key,str(v),str(self.allowed_range[key][0])))
+					val[k] = self.allowed_range[key][0]
+				elif v >= self.allowed_range[key][0] and v <= self.allowed_range[key][1]:
+					pass
+				else:
+					raise RuntimeError("Nonsensical value in range_correct for index %d of %s: %s, allowed range is %s" % (int(k),key,str(val),str(self.allowed_range[key])))
+		else: #assume it's a scalar value
+			if val > self.allowed_range[key][1]:
+				self.log.warn("Attempting to set key %s to a value greater than allowed [%.3f]."+\
+						"setting to max allowed [%.3f]" % (k,key,val,self.allowed_range[key][1]))
+				val = self.allowed_range[key][1]
+			elif val < self.allowed_range[key][0]:
+				self.log.warn("Attempting to set key %s to a value greater than allowed [%.3f]."+\
+						"setting to min allowed [%.3f]" % (key,val,self.allowed_range[key][0]))
+				val = self.allowed_range[key][0]
+			elif val >= self.allowed_range[key][0] and val <= self.allowed_range[key][1]:
+				pass
+			else:
+				raise RuntimeError("Nonsensical value in range_correct for %s: %s, allowed values: %s" % (key,str(val),str(self.allowed_range[key])))
+		return val 
+
+	def __setitem__(self,key,val):
+		"""Check that we obey the allowed_range"""
+		if key not in self.units:
+			self.log.warn("ON SETTING %s has no units. Setting to None" %(key))
+			self.units[key]=None
+		if key not in self.descriptions:
+			self.log.warn("ON SETTING %s has no description. Setting to None" %(key))
+			self.descriptions[key]=None
+		if key not in self.allowed_range:
+			self.log.warn("ON SETTING %s has no allowed_range. Skipping range check" %(key))
+		else:
+			val = self.range_correct(key,val)
+
+		OrderedDict.__setitem__(self,key,val)
+
+	def __getitem__(self,key):
+		item = OrderedDict.__getitem__(self,key)
+		if key not in self.allowed_range:
+			self.log.warn("ON GETTING %s has no allowed_range." %(key))
+		if key not in self.descriptions:
+			self.log.warn("ON GETTING %s has no description." %(key))
+		if key not in self.units:
+			self.log.warn("ON GETTING %s has no units." %(key))
+		return item
+
+	def copyasdict(self):
+		newdict = dict()
+		for key in self:
+			newdict[key]=OrderedDict.__getitem__(self,key)
+		return newdict
+	
+	def __call__(self):
+		pass
+
+	
+class ModelRunDriversOD(ModelRunOD):
+	def __init__(self):
+		super(ModelRunDriversOD,self).__init__()
+		self.awesome = True
+		
+
+class ModelRunVariablesOD(ModelRunOD):
+	def __init__(self):
+		super(ModelRunVariablesOD,self).__init__()
+		#Add functionality for variable limits
+		self.lims = dict()
+		self._lims = dict()
+		self.npts = dict()
+
 class ModelRun(object):
 	"""
 	The ModelRun class is a generic class for individual calls to atmospheric models.
@@ -136,40 +237,41 @@ class ModelRun(object):
 		self.xkey = None
 		self.ykey = None
 
-		#if two are > 1, then we do a grid
-		self.npts = OrderedDict()
-		self.npts['Latitude']=1
-		self.npts['Longitude']=1
-		self.npts['Altitude']=1
-		
 		#the cannocical 'vars' dictionary, which has 
 		#keys which are used to populate the combobox widgets,
-		self.vars = OrderedDict()
+		self.vars = ModelRunVariablesOD()
 		self.vars['Latitude']=None
 		self.vars['Longitude']=None
 		self.vars['Altitude']=None
 
-		#the limits dictionary serves two purposes, 
-		#1.) to constrain axes in the plots
-		#2.) to determine the variable boundaries when we're generating ranges of locations
-		self.lims = OrderedDict()
-		self.lims['Latitude']=[-90.,90.]
-		self.lims['Longitude']=[-180.,180.]
-		self.lims['Altitude']=[0.,400.]
+		#if two are > 1, then we do a grid
+		self.vars.npts['Latitude']=1
+		self.vars.npts['Longitude']=1
+		self.vars.npts['Altitude']=1
+		
+		self.vars.lims['Latitude']=[-90.,90.]
+		self.vars.lims['Longitude']=[-180.,180.]
+		self.vars.lims['Altitude']=[0.,400.]
 
-		#the bounds dictionary is very similar to the lims, but it is NOT TO BE MODIFIED
+		#the _lims dictionary is very similar to the lims, but it is NOT TO BE MODIFIED
 		#by any outside objects. It records the max and min values of every variable and is 
 		#set when the finalize method is called. The reason it is included at all is so that
 		#if the user (or another method) changes the lims, we can revert back to something if they
 		#want that.
-		self.bounds = OrderedDict()
-		for k in self.lims:
-			self.bounds[k] = self.lims[k]
+		for k in self.vars.lims:
+			self.vars._lims[k] = self.vars.lims[k]
+			self.vars.allowed_range[k] = self.vars.lims[k]
+
+		#The units dictionary simply holds the unit for a variable
+		self.vars.units['Latitude'] = 'deg'
+		self.vars.units['Longitude'] = 'deg'
+		self.vars.units['Altitude'] = 'km'
 
 		#The drivers dictionary take input about whatever solar wind parameters drive the model
 		#These must be either scalars (floats) or lists.
 		#The keys to this dict must be keyword argument names in the model call 
-		self.drivers = dict()
+		self.drivers = ModelRunDriversOD()
+		self.log.debug("Class of drivers dict is %s" % (self.drivers.__class__.__name__))
 
 		self.shape = None #Tells how to produce gridded output, defaults (if None) to use column vectors
 		self.totalpts = None #Tells how many total points
@@ -180,9 +282,9 @@ class ModelRun(object):
 			self.autoscale_lims(key)
 			
 	def autoscale_lims(self,key):
-		if key in self.lims and key in self.bounds:
-			self.log.info("Restoring original bounds (was %s, now %s) for %s" % (str(self.lims[key]),str(self.bounds[key]),key))
-			self.lims[key] = self.bounds[key]
+		if key in self.vars.lims and key in self.vars._lims:
+			self.log.info("Restoring original bounds (was %s, now %s) for %s" % (str(self.vars.lims[key]),str(self.vars._lims[key]),key))
+			self.vars.lims[key] = self.vars._lims[key]
 		else:
 			raise ValueError("Key %s is not a valid model run variable" % (key))
 
@@ -190,7 +292,7 @@ class ModelRun(object):
 		"""Holds an ephem variable constant by ensuring it's npts is 1s"""
 		self.log.info("Holding %s constant" % (key))
 		if key in ['Latitude','Longitude','Altitude']:
-			self.npts[key] = 1
+			self.vars.npts[key] = 1
 		else:
 			raise RuntimeError('Cannot hold %s constant, not a variable!'%(key))
 
@@ -210,7 +312,7 @@ class ModelRun(object):
 		else:
 			raise RuntimeError('Cannot set %s as y, not a variable!'%(key))
 
-	def get_data(self,lat=None,lon=None,alt=None):
+	def as_csv(self):
 		pass
 
 	def populate(self):
@@ -220,18 +322,18 @@ class ModelRun(object):
 		
 		#Count up the number of independant variables
 		nindependent=0
-		for key in self.npts:
-			if self.npts[key] > 1:
+		for key in self.vars.npts:
+			if self.vars.npts[key] > 1:
 				nindependent+=1
-				self.shape = (self.npts[key],1)
+				self.shape = (self.vars.npts[key],1)
 
 		if nindependent>1: #If gridding set the shape
-			self.shape = (int(self.npts[self.xkey]),int(self.npts[self.ykey]))
+			self.shape = (int(self.vars.npts[self.xkey]),int(self.vars.npts[self.ykey]))
 
 		#Populate the ephemeris variables as vectors
 		for var in ['Latitude','Longitude','Altitude']:
-			if self.npts[var]>1:
-					self.vars[var] = np.linspace(self.lims[var][0],self.lims[var][1],self.npts[var])
+			if self.vars.npts[var]>1:
+					self.vars[var] = np.linspace(self.vars.lims[var][0],self.vars.lims[var][1],self.vars.npts[var])
 			else:
 				if self.vars[var] is not None:
 					self.vars[var] = np.ones(self.shape)*self.vars[var]
@@ -263,9 +365,9 @@ class ModelRun(object):
 			
 		for v in self.vars:
 			self.vars[v] = np.reshape(self.vars[v],self.shape)
-			self.bounds[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
+			self.vars._lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
 			if v not in ['Latitude','Longitude','Altitude']: #Why do we do this again? Why not the positions?
-				self.lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
+				self.vars.lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
 			
 			
 	def __str__(self):
@@ -274,9 +376,9 @@ class ModelRun(object):
 		"""
 		mystr = "Model: %s|" % (self.modelname)
 		if self.xkey is not None:
-			mystr = mystr+"Dimension 1 %s: [%.3f-%.3f]|" % (self.xkey,self.lims[self.xkey][0],self.lims[self.xkey][1])
+			mystr = mystr+"Dimension 1 %s: [%.3f-%.3f][%s]|" % (self.xkey,self.vars.lims[self.xkey][0],self.vars.lims[self.xkey][1],self.vars.units[self.xkey])
 		if self.ykey is not None:
-			mystr = mystr+"Dimension 2 %s: [%.3f-%.3f]|" % (self.ykey,self.lims[self.ykey][0],self.lims[self.ykey][1])
+			mystr = mystr+"Dimension 2 %s: [%.3f-%.3f][%s]|" % (self.ykey,self.vars.lims[self.ykey][0],self.vars.lims[self.ykey][1],self.vars.units[self.ykey])
 		if 'Latitude' not in [self.xkey,self.ykey]:
 			mystr = mystr+"Latitude held constant at %.3f|" % (self.vars['Latitude'].flatten()[0]) #By this point they will be arrays
 		if 'Longitude' not in [self.xkey,self.ykey]:
@@ -284,7 +386,7 @@ class ModelRun(object):
 		if 'Altitude' not in [self.xkey,self.ykey]:
 			mystr = mystr+"Altitude held constant at %.3f|" % (self.vars['Altitude'].flatten()[0])
 		for d in self.drivers:
-			mystr = mystr+"Driver %s: %s|" % (d,str(self.drivers[d]))
+			mystr = mystr+"Driver %s: %s|[%s]" % (d,str(self.drivers[d]),str(self.drivers.units[d]))
 		mystr = mystr+"Generated at: %s"  % (datetime.datetime.now().strftime('%c'))
 		return mystr
 
@@ -295,47 +397,58 @@ class ModelRun(object):
 			self.log.debug("Getting multiple variables/limits %s" % (str(key)))
 			var = []
 			lim = []
+			unit = []
+			desc = []
 			for k in key:
-				v,l = self.__getitem__(k)
+				v,l,u,d = self.__getitem__(k)
 				var.append(v)
 				lim.append(l)
-			return var,lim
+				unit.append(u)
+				desc.append(d)
+			return var,lim,unit,desc
 		else:
 			if self.peer is None:
-				self.log.debug("Getting variables/limits for %s" % (key))
-				return self.vars[key],self.lims[key]
+				self.log.debug("Getting variables/limits/units/description for %s" % (key))
+				return self.vars[key],self.vars.lims[key],self.vars.units[key],self.vars.descriptions[key]
 			else:
 				if key not in ['Latitude','Longitude','Altitude']:
 					self.log.info( "Entering difference mode for var %s" % (key))
 					#Doesn't make sense to difference locations
-					mydata,mylims = self.vars[key],self.lims[key]
+					mydata,mylims = self.vars[key],self.vars.lims[key]
 					peerdata,peerlims = self.peer[key] #oh look, recursion opportunity!
 					newdata = mydata-peerdata
 					newlims = (np.nanmin(newdata.flatten()),np.nanmax(newdata.flatten()))
+					newunits = 'diff(%s)' % str(self.vars.units[key])
+					newdesc = self.vars.descriptions[key]+"(difference)"
 					#newlims = lim_pad(newlims)
-					return newdata,newlims
+					return newdata,newlims,newunits,newdesc
 				else:
-					return self.vars[key],self.lims[key]
+					return self.vars[key],self.vars.lims[key]
 
 class HWMRun(ModelRun):
 	""" Class for individual calls to HWM """
 	import hwmpy
 	
 	def __init__(self):
-		"""Start with a blank slate"""
-		#This syntax allows for multiple inheritance,
-		#we don't use it, but it's good practice to use this 
-		#instead of ModelRun.__init__()
+		"""Initialize HWM ModelRun Subclass"""
 		super(HWMRun,self).__init__()
-		#MSIS DRIVERS
+		#HWM DRIVERS
 		#ap - float
 		#	daily AP magnetic index
 		#Overwrite the superclass logger
-		self.log = getLogger(__name__)
+		self.log = logging.getLogger(__name__)
 		
 		self.modelname = "Horizontal Wind Model 07 (HWM07)"
+
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
+		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2012,12,31,23,59,59)]
+		self.drivers.units['dt'] = 'UTC'
+		
 		self.drivers['ap']=None
+		self.drivers.allowed_range['ap'] = [0,400]
+		self.drivers.units['ap'] = 'unitless' #No units 
+
+		self.vars.allowed_range['Altitude'] = [100.,500.]
 		
 	def populate(self):
 
@@ -344,29 +457,23 @@ class HWMRun(ModelRun):
 		self.log.info( "Now runing HWM07 for %s...\n" % (self.drivers['dt'].strftime('%c')))
 		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
-		self.winds,self.drivers = hwmpy.hwm(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
+		#Call the F2Py Wrapper on the Fortran HWM07
+		self.winds,outdrivers = hwmpy.hwm(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
 		
+		#Copy the output drivers into the drivers dictionary
+		for d in outdrivers:
+			self.drivers[d] = outdrivers[d]
+
 		#Now add all the zonal and meridional winds to the dictionary
+		#Also add the units
 		for w in self.winds:
 			self.vars[w] = self.winds[w]
+			self.vars.units[w] = 'km/s'
 
 		#Finish reshaping the data
 		self.finalize()
 
-				#print "%s:%s" % (v,repr(self.lims[v]))
-			#print "lims for var %s = [%f,%f]" % (v,self.lims[v][0],self.lims[v][1])
-
-class MsisRun(ModelRun):
-	""" Class for individual calls to NRLMSISE00 """
-	import msispy
-	
-	def __init__(self):
-		"""Start with a blank slate"""
-		#This syntax allows for multiple inheritance,
-		#we don't use it, but it's good practice to use this 
-		#instead of ModelRun.__init__()
-		super(MsisRun,self).__init__()
-		#MSIS DRIVERS
+#MSIS DRIVERS
 		#f107 - float
 		#	daily f10.7 flux for previous day
 		#ap_daily - float
@@ -386,14 +493,32 @@ class MsisRun(ModelRun):
 		#apa3657 
 		#	Average of eight 3 hour AP indices from 36 to 57 hours prior to current time
 
+class MsisRun(ModelRun):
+	""" Class for individual calls to NRLMSISE00 """
+	import msispy
+	
+	def __init__(self):
+		"""ModelRun subclass which adds MSIS to GUI"""
+		super(MsisRun,self).__init__()
+		
 		#Overwrite the superclass logger
 		self.log = logging.getLogger(self.__class__.__name__)
 
 		self.modelname = "NRLMSISE00"
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
+		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1,0,0,0),datetime.datetime(2012,12,31,23,59,59)]
+
 		self.drivers['f107']=None
+		self.drivers.allowed_range['f107'] = [0.,350.]
+		self.drivers.units['f107'] = '10^-22 W/m2/Hz'
+
 		self.drivers['ap_daily']=None
+		self.drivers.allowed_range['ap_daily'] = [0.,400.]
+		self.drivers.units['ap_daily'] = 'unitless' #No units 
+		
 		self.drivers['f107a']=None
+		self.drivers.allowed_range['f107'] = [0.,350.]
+		self.drivers.units['f107'] = '10^-22 W/m2/Hz'
 
 	def populate(self):
 
@@ -402,15 +527,29 @@ class MsisRun(ModelRun):
 		self.log.info( "Now runing NRLMSISE00 for %s...\n" % (self.drivers['dt'].strftime('%c')))
 		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
-		self.species,self.t_exo,self.t_alt,self.drivers = msispy.msis(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
+		self.species,self.t_exo,self.t_alt,outdrivers = msispy.msis(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
 		
+		#Copy the output drivers into the drivers dictionary
+		for d in outdrivers:
+			self.drivers[d] = outdrivers[d]
+
 		#Now add temperature the variables dictionary
 		self.vars['T_exospheric'] = self.t_exo
+		self.vars.units['T_exospheric'] = 'K'
+		self.vars.descriptions['T_exospheric'] = 'Exospheric Temperature'
+		
 		self.vars['Temperature'] = self.t_alt
+		self.vars.units['Temperature'] = 'K'
 		
 		#Now add all of the different number and mass densities to to the vars dictionary
 		for s in self.species:
 			self.vars[s] = self.species[s]
+			if s == 'mass':
+				self.vars.units[s] = 'g/cm^3'
+				self.vars.descriptions[s] = 'Mass Density'
+			else:
+				self.vars.units[s] = '1/cm^3'
+				self.vars.descriptions[s] = 'Number Density of %s' % (s)
 
 		self.finalize()
 
@@ -419,7 +558,7 @@ class ModelRunner(object):
 	""" Makes model calls """
 	def __init__(self,canvas=None,model="msis"):
 		self.log = logging.getLogger(self.__class__.__name__)
-		
+
 		self.cv = canvas
 		self.model = model
 
@@ -500,7 +639,7 @@ class ModelRunner(object):
 		
 
 class PlotDataHandler(object):
-	def __init__(self,canvas,controlstate=None,plottype='line',cscale='linear',mapproj='mill'):
+	def __init__(self,canvas,controlstate=None,plottype='line',cscale='linear',mapproj='moll'):
 		"""
 		Takes a singleMplCanvas instance to associate with
 		and plot on
@@ -556,10 +695,12 @@ class PlotDataHandler(object):
 		self.xname,self.yname,self.zname = None,None,None #must be string
 		self.xbounds,self.ybounds,self.zbounds = None,None,None #must be 2 element tuple
 		self.xlog, self.ylog, self.zlog = False, False, False
+		self.xunits, self.yunits, self.zunits = None, None, None
+		self.xdesc, self.ydesc, self.zdesc = None, None, None
 		self.npts = None
 		self.statistics = None # Information about each plotted data
 
-	def associate_data(self,varxyz,vardata,varname,varbounds,varlog,multi=False):
+	def associate_data(self,varxyz,vardata,varname,varbounds,varlog,multi=False,units=None,description=None):
 		#Sanity check 
 		if not multi:
 			thislen = len(vardata.flatten()) 
@@ -567,7 +708,12 @@ class PlotDataHandler(object):
 		else:
 			thislen = len(vardata[0].flatten()) 
 			thisshape = vardata[0].shape
-		
+			#Make sure all the arguments have same length, even if left as default
+			if not hasattr(units,'__iter__') : #if it isn't a list, make it one
+				units = [units for i in range(len(vardata))]
+			if not hasattr(description,'__iter__') : #if it isn't a list, make it one
+				description = [description for i in range(len(vardata))]
+			
 		#Check total number of points
 		if self.npts is not None:
 			if thislen != self.npts:
@@ -589,17 +735,23 @@ class PlotDataHandler(object):
 			self.xbounds = varbounds
 			self.xlog = varlog
 			self.xmulti = multi
+			self.xunits = units
+			self.xdesc = description
 		elif varxyz in ['y','Y',1,'yvar']:
 			self.y = vardata
 			self.yname = varname
 			self.ybounds = varbounds
 			self.ylog = varlog
 			self.ymulti = multi
+			self.yunits = units
+			self.ydesc = description
 		elif varxyz in ['z','Z',2,'C','c','zvar']:
 			self.z = vardata
 			self.zname = varname
 			self.zbounds = varbounds
 			self.zlog = varlog
+			self.zunits = units
+			self.zdesc = description
 		else:
 			raise ValueError('%s is not a valid axes for plotting!' % (str(varaxes)))
 
@@ -714,8 +866,10 @@ class PlotDataHandler(object):
 				self.ax.plot(self.x,self.y,*args,**kwargs)
 				xbnds = self.xbounds
 				ybnds = self.ybounds
-				xnm = self.xname
-				ynm = self.yname
+				xnm = self.xname  
+				xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
+				ynm = self.yname 
+				ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
 
 			elif self.xmulti and not self.ymulti: #Overplotting xvars
 				
@@ -723,13 +877,22 @@ class PlotDataHandler(object):
 				xbnds = self.xbounds[0]
 				ybnds = self.ybounds
 				xnm = ''
-				for nm in self.xname:
-					xnm += nm+','
+				endut = self.xunits[0]
+				for i in range(len(self.xname)):
+					nm,ut = self.xname[i],self.xunits[i]
+					if ut is not None and ut != endut:
+						xnm += nm+'[%s]'%(str(ut))+','
+					else:
+						xnm += nm+','
 				xnm = xnm[:-1] #Remove last comma
+				xnm += '[%s]' % (endut) if endut is not None else ''
+				
 				print xnm
 				print self.xbounds
 
-				ynm = self.yname
+				ynm = self.yname 
+				ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
+
 				for i in range(len(self.x)):
 					self.ax.plot(self.x[i],self.y,label=self.xname[i],*args,**kwargs) #should cycle through colors
 					self.ax.hold(True)
@@ -743,11 +906,21 @@ class PlotDataHandler(object):
 				self.log.debug("Y multiplotting is requested: X var %s, Y vars %s" % (str(self.xname),str(self.yname)))
 				ybnds = self.ybounds[0]
 				xbnds = self.xbounds
-				xnm = self.xname
+				xnm = self.xname 
+				xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
+
 				ynm = ''
-				for nm in self.yname:
-					ynm += nm+','
+
+				endut = self.yunits[0]
+				for i in range(len(self.yname)):
+					nm,ut = self.yname[i],self.yunits[i]
+					if ut is not None and ut != endut:
+						ynm += nm+'[%s]'%(str(ut))+','
+					else:
+						ynm += nm+','
 				ynm = ynm[:-1] #Remove last comma
+				ynm += '[%s]' % (endut) if endut is not None else ''
+
 				for i in range(len(self.y)):
 					self.ax.plot(self.x,self.y[i],label=self.yname[i],*args,**kwargs) #should cycle through colors
 					self.ax.hold(True)
@@ -793,15 +966,22 @@ class PlotDataHandler(object):
 			self.log.info("Plottype is pcolor for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.xname),str(self.xbounds),
 				str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
 
+			xnm = self.xname
+			xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
+			ynm = self.yname 
+			ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
+			znm = self.zname
+			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
+
 			mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
 			#m.draw()
 
-			self.ax.set_xlabel(self.xname)
+			self.ax.set_xlabel(xnm)
 			if self.xlog:
 				self.ax.set_xscale('log',nonposx='clip')
 			self.ax.set_xlim(self.xbounds)
 
-			self.ax.set_ylabel(self.yname)
+			self.ax.set_ylabel(ynm)
 			
 			if self.ylog:
 				self.ax.set_xscale('log',nonposx='clip')
@@ -817,12 +997,16 @@ class PlotDataHandler(object):
 			self.cb.ax.set_position([.1,0,.8,.15])
 			self.ax.set_position([.1,.25,.8,.7])
 
-			self.cb.set_label(self.zname)
+			self.cb.set_label(znm)
 			self.ax.set_aspect(1./self.ax.get_data_ratio())
-			self.fig.suptitle('%s vs. %s (color:%s)' % (self.xname,self.yname,
-				self.zname if not self.zlog else 'log(%s)'%self.zname))
+			self.fig.suptitle('%s vs. %s (color:%s)' % (xnm,ynm,
+				znm if not self.zlog else 'log(%s)'% znm))
 			
 		elif self.plottype == 'map':
+			
+			znm = self.zname
+			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
+
 			self.log.info("Plottype is %s projection MAP for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.mapproj),str(self.xname),str(self.xbounds),
 				str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
 
@@ -870,15 +1054,18 @@ class PlotDataHandler(object):
 
 			#m.set_axes_limits(ax=self.canvas.ax)
 			
-			self.ax.set_xlim(lonbounds)
-			self.ax.set_ylim(latbounds)
+			if self.mapproj == 'mill':
+				self.ax.set_xlim(lonbounds)
+				self.ax.set_ylim(latbounds)
+				self.cb.ax.set_position([.1,.05,.8,.15])
+				self.ax.set_position([.1,.2,.8,.7])
+			elif self.mapproj == 'moll':
+				self.cb.ax.set_position([.1,.03,.8,.13])
+				self.ax.set_position([.05,.2,.9,.9])
 
-			self.cb.ax.set_position([.1,.05,.8,.15])
-			self.ax.set_position([.1,.2,.8,.7])
-
-			self.cb.set_label(self.zname)
+			self.cb.set_label(znm)
 			self.ax.set_title('%s Projection Map of %s' % (self.supported_projections[self.mapproj],
-				self.zname if not self.zlog else 'log(%s)' % (self.zname)))
+				znm if not self.zlog else 'log(%s)' % (znm)))
 			self.map = m
 		#Now call the canvas cosmetic adjustment routine
 		self.canvas.apply_lipstick()

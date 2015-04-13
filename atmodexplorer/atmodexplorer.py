@@ -108,7 +108,7 @@ class singleMplCanvas(FigureCanvas):
 		self.set_mplparams()
 		self.ax = self.fig.add_subplot(111)
 		#Create a data handler and a click handler
-		self.pdh = PlotDataHandler(self)
+		
 		
 		#Associate with a model runner and the main window (allows access of children of the canvas to the QWidgets)
 		self.mr = ModelRunner(self)
@@ -132,6 +132,8 @@ class singleMplCanvas(FigureCanvas):
 		#This will allow us to see what has changed between
 		#redraws/refreshes
 		self.last_controlstate = self.controlstate.copy() 
+
+		self.pdh = PlotDataHandler(self)
 
 		#Init the right-click menu
 		self.create_actions()
@@ -293,9 +295,9 @@ class singleMplCanvas(FigureCanvas):
 			self.reset() #Reset the click handler and the plotDataHandler
 			
 		#Always grab the most current data	
-		xdata,xlims = self.mr[self.controlstate['xvar']] #returns data,lims
-		ydata,ylims = self.mr[self.controlstate['yvar']] #returns data,lims
-		zdata,zlims = self.mr[self.controlstate['zvar']] #returns data,lims
+		xdata,xlims,xunits,xdesc = self.mr[self.controlstate['xvar']] #returns data,lims
+		ydata,ylims,yunits,ydesc = self.mr[self.controlstate['yvar']] #returns data,lims
+		zdata,zlims,zunits,zdesc = self.mr[self.controlstate['zvar']] #returns data,lims
 		
 		#print '%s:%s' % (self.controlstate['xvar'],repr(xlims))
 		#print '%s:%s' % (self.controlstate['yvar'],repr(ylims))
