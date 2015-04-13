@@ -65,12 +65,10 @@ class ModelRunOD(OrderedDict):
 					raise RuntimeError("Nonsensical value in range_correct for index %d of %s: %s, allowed range is %s" % (int(k),key,str(val),str(self.allowed_range[key])))
 		else: #assume it's a scalar value
 			if val > self.allowed_range[key][1]:
-				self.log.warn("Attempting to set key %s to a value greater than allowed [%s]."+\
-						"setting to max allowed [%.3f]" % (k,key,val,str(self.allowed_range[key][1])))
+				self.log.warn("Attempting to set key %s to a value greater than allowed [%s],setting to max allowed [%s]" % (key,str(val),str(self.allowed_range[key][1])))
 				val = self.allowed_range[key][1]
 			elif val < self.allowed_range[key][0]:
-				self.log.warn("Attempting to set key %s to a value greater than allowed [%s]."+\
-						"setting to min allowed [%.3f]" % (key,val,str(self.allowed_range[key][0])))
+				self.log.warn("Attempting to set key %s to a value greater than allowed [%s],setting to min allowed [%s]" % (key,str(val),str(self.allowed_range[key][0])))
 				val = self.allowed_range[key][0]
 			elif val >= self.allowed_range[key][0] and val <= self.allowed_range[key][1]:
 				pass
@@ -386,7 +384,7 @@ class ModelRun(object):
 		if 'Altitude' not in [self.xkey,self.ykey]:
 			mystr = mystr+"Altitude held constant at %.3f|" % (self.vars['Altitude'].flatten()[0])
 		for d in self.drivers:
-			mystr = mystr+"Driver %s: %s|[%s]" % (d,str(self.drivers[d]),str(self.drivers.units[d]))
+			mystr = mystr+"Driver %s: %s[%s]|" % (d,str(self.drivers[d]),str(self.drivers.units[d]))
 		mystr = mystr+"Generated at: %s"  % (datetime.datetime.now().strftime('%c'))
 		return mystr
 
