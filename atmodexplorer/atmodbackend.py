@@ -19,7 +19,8 @@ import textwrap #for __str__ of ModelRun
 
 from mpl_toolkits.basemap import Basemap
 from matplotlib import ticker
-from matplotlib.colors import LogNorm, Normalize
+
+
 import msispy,hwmpy
 from collections import OrderedDict
 

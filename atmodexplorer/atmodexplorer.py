@@ -205,14 +205,14 @@ class singleMplCanvas(FigureCanvas):
 				raise RuntimeError('xvar %s is not a valid position variable!' % (self.controlstate['xvar']))
 			else:
 				#self.mr.nextrun.lims[self.controlstate['xvar']] = self.controlstate['xbounds']
-				self.mr.nextrun.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
+				self.mr.nextrun.vars.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
 				self.mr.nextrun.set_x(self.controlstate['xvar'])
 
 			if not self.is_position('y'):
 				raise RuntimeError('yvar %s is not a valid position variable!' % (self.controlstate['yvar']))
 			else:
 				#self.mr.nextrun.lims[self.controlstate['yvar']] = self.controlstate['ybounds']
-				self.mr.nextrun.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
+				self.mr.nextrun.vars.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
 				self.mr.nextrun.set_y(self.controlstate['yvar'])
 			
 		else: #We do not need to grid data
@@ -231,11 +231,11 @@ class singleMplCanvas(FigureCanvas):
 			
 			elif not self.is_multi('x') and self.is_position('x'): #It's scalar, so check if it's a position
 				#self.mr.nextrun.lims[self.controlstate['xvar']] = self.controlstate['xbounds']
-				self.mr.nextrun.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
+				self.mr.nextrun.vars.npts[self.controlstate['xvar']] = self.controlstate['xnpts']
 				self.mr.nextrun.set_x(self.controlstate['xvar'])
 
 			elif not self.is_multi('y') and self.is_position('y'): #It's scalar, so check if it's a position
-				self.mr.nextrun.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
+				self.mr.nextrun.vars.npts[self.controlstate['yvar']] = self.controlstate['ynpts']
 				self.mr.nextrun.set_y(self.controlstate['yvar'])
 			else:
 				raise RuntimeError('Nonsensical variables: xvar:%s\n yvar:%s\n' % (repr(self.controlstate['xvar']),repr(self.controlstate['yvar'])))
@@ -261,7 +261,7 @@ class singleMplCanvas(FigureCanvas):
 		if self.changed('datetime') or ffr:
 			#Force model rerun
 			self.controlstate['run_model_on_refresh']=True
-			self.mr.nextrun.dt = self.controlstate['datetime']
+			self.mr.nextrun.drivers['dt'] = self.controlstate['datetime']
 
 		if self.changed('lat') or ffr:
 			if 'Latitude' not in [self.controlstate['xvar'],self.controlstate['yvar']]:
@@ -508,7 +508,7 @@ class singleMplCanvas(FigureCanvas):
 		new_value = str(new_value) #Make sure not QString
 		logging.info( "X data set in singleMplCanvas to %s" % (new_value))
 		self.controlstate['xvar']=new_value
-		self.controlstate['xbounds']=self.mr.runs[-1].lims[new_value]
+		self.controlstate['xbounds']=self.mr.runs[-1].vars.lims[new_value]
 
 		
 	@pyqtSlot(str)
@@ -517,7 +517,7 @@ class singleMplCanvas(FigureCanvas):
 		new_value = str(new_value) #Make sure not QString
 		logging.info( "Y data set in singleMplCanvas to %s" % (new_value))
 		self.controlstate['yvar']=new_value
-		self.controlstate['ybounds']=self.mr.runs[-1].lims[new_value]
+		self.controlstate['ybounds']=self.mr.runs[-1].vars.lims[new_value]
 		
 
 	@pyqtSlot(str)
@@ -526,7 +526,7 @@ class singleMplCanvas(FigureCanvas):
 		new_value = str(new_value) #Make sure not QString
 		logging.info( "Z data set in singleMplCanvas to %s" % (new_value))
 		self.controlstate['zvar']=new_value
-		self.controlstate['zbounds']=self.mr.runs[-1].lims[new_value]
+		self.controlstate['zbounds']=self.mr.runs[-1].vars.lims[new_value]
 		
 
 	@pyqtSlot(str)
