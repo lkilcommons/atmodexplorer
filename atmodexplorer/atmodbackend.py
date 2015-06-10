@@ -333,13 +333,13 @@ class ModelRun(object):
 		for var in ['Latitude','Longitude','Altitude']:
 			if self.vars.npts[var]>1:
 					self.vars[var] = np.linspace(self.vars.lims[var][0],self.vars.lims[var][1],self.vars.npts[var])
+					self.log.debug("Generating %d %s points from %.3f to %.3f" % (self.vars.npts[var],var,self.vars.lims[var][0],self.vars.lims[var][1]))
 			else:
 				if self.vars[var] is not None:
 					self.vars[var] = np.ones(self.shape)*self.vars[var]
 				else:
 					raise RuntimeError('Set %s to something first if you want to hold it constant.' % (var))
 			
-
 		if nindependent>1:
 			x = self.vars[self.xkey]
 			y = self.vars[self.ykey]
@@ -519,6 +519,10 @@ class MsisRun(ModelRun):
 		self.drivers.allowed_range['f107'] = [0.,350.]
 		self.drivers.units['f107a'] = 'SFU' #10^-22 W/m2/Hz'
 
+		#Warning: if you don't define this you will be restricted to 
+		#0 to 400 km, which is the default set in the above function
+		self.vars.allowed_range['Altitude'] = [0.,1000.]
+		
 	def populate(self):
 
 		super(MsisRun,self).populate()
