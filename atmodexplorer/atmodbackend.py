@@ -19,6 +19,7 @@ import textwrap #for __str__ of ModelRun
 
 from mpl_toolkits.basemap import Basemap
 from matplotlib import ticker
+from matplotlib.colors import Normalize, LogNorm
 
 
 import msispy,hwmpy
@@ -388,7 +389,6 @@ class ModelRun(object):
 			mystr = mystr+"Driver %s: %s[%s]|" % (d,str(self.drivers[d]),str(self.drivers.units[d]))
 		mystr = mystr+"Generated at: %s"  % (datetime.datetime.now().strftime('%c'))
 		return mystr
-
 
 	def __getitem__(self,key):
 		"""Easy syntax for returning data"""
