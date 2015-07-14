@@ -575,7 +575,7 @@ class ModelRunner(object):
 		self.init_nextrun()
 		self.nextrun.drivers['dt'] = datetime.datetime(2000,6,21,12,0,0) #Summer solstice
 
-		
+
 		#Set counters
 		self.n_total_runs=0
 		self.n_max_runs=10
@@ -607,6 +607,11 @@ class ModelRunner(object):
 		#Add to runs list, create a new nextrun
 		self.runs.append(self.nextrun)
 		self.init_nextrun()
+
+		if propagate_drivers:
+			for key in self.runs[-1].drivers:
+				if key in self.nextrun.drivers and self.nextrun.drivers[key] is None:
+					self.nextrun.drivers[key] = self.runs[-1].drivers[key]
 
 		if self.differencemode:
 			#Update the peering
