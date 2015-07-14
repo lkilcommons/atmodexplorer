@@ -506,19 +506,23 @@ class MsisRun(ModelRun):
 		self.modelname = "NRLMSISE00"
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
 		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1,0,0,0),datetime.datetime(2012,12,31,23,59,59)]
+		self.drivers.descriptions['dt'] = 'Date and time of model run'
 
 		self.drivers['f107']=None
 		self.drivers.allowed_range['f107'] = [0.,350.]
 		self.drivers.units['f107'] = 'SFU'
+		self.drivers.descriptions['f107'] = 'Solar 10.7 cm Flux'
 
 		self.drivers['ap_daily']=None
 		self.drivers.allowed_range['ap_daily'] = [0.,400.]
 		self.drivers.units['ap_daily'] = 'unitless' #No units 
+		self.drivers.descriptions['ap_daily'] = 'AP planetary activity index'
 		
 		self.drivers['f107a']=None
-		self.drivers.allowed_range['f107'] = [0.,350.]
+		self.drivers.allowed_range['f107a'] = [0.,350.]
 		self.drivers.units['f107a'] = 'SFU' #10^-22 W/m2/Hz'
-
+		self.drivers.descriptions['f107a'] = '81-day Average Solar 10.7 cm Flux'
+		
 		#Warning: if you don't define this you will be restricted to 
 		#0 to 400 km, which is the default set in the above function
 		self.vars.allowed_range['Altitude'] = [0.,1000.]
