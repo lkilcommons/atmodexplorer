@@ -278,7 +278,7 @@ class ModelRun(object):
 		self.peer = None #Can be either None, or another ModelRun, allows for comparing two runs
 
 	def autoscale_all_lims(self):
-		for key in self.lims:
+		for key in self.vars.lims:
 			self.autoscale_lims(key)
 			
 	def autoscale_lims(self,key):
