@@ -1017,6 +1017,9 @@ class PlotDataHandler(object):
 				znm if not self.zlog else 'log(%s)'% znm))
 			
 		elif self.plottype == 'map':
+			#Basemap is too screwy for partial maps
+			#self.ybounds = [-90.,90.]
+			#self.xbounds = [-180.,180.]
 			
 			znm = self.zname
 			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
