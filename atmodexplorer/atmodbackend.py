@@ -22,23 +22,22 @@ from matplotlib import ticker
 from matplotlib.colors import Normalize, LogNorm
 
 
-import msispy,hwmpy
+import msispy,hwmpy,iripy
 from collections import OrderedDict
 
 import logging
 logging.basicConfig(level=logging.INFO)
 
-class ModelRunOD(OrderedDict):
+class RangeCheckOD(OrderedDict):
 	"""
-	OrderedDict subclass for storing values for variables and drivers. It also stores an additional dict of units for each driver,
-	and allowed values for each driver
+	OrderedDict subclass that ensures that keys that are numerical are within a certain range
 	"""
-	def __init__(self):
-		super(ModelRunOD,self).__init__()
+	def __init__(self,allowed_range_peer=None):
+		super(RangeCheckOD,self).__init__()
 		self.log = logging.getLogger(self.__class__.__name__)
-		self.descriptions = dict()
-		self.units = dict()
 		self.allowed_range = dict()
+		#allow on-the-fly copy of allowed range values from another object
+		self.allowed_range_peer = allowed_range_peer
 
 	def range_correct(self,key,val):
 		"""Check that the value about to be set at key, is within the specified allowed_range for that key"""
@@ -80,12 +79,8 @@ class ModelRunOD(OrderedDict):
 
 	def __setitem__(self,key,val):
 		"""Check that we obey the allowed_range"""
-		if key not in self.units:
-			self.log.warn("ON SETTING %s has no units. Setting to None" %(key))
-			self.units[key]=None
-		if key not in self.descriptions:
-			self.log.warn("ON SETTING %s has no description. Setting to None" %(key))
-			self.descriptions[key]=None
+		if self.allowed_range_peer is not None:
+			self.allowed_range = getattr(self.allowed_range_peer,'allowed_range')
 		if key not in self.allowed_range:
 			self.log.warn("ON SETTING %s has no allowed_range. Skipping range check" %(key))
 		else:
@@ -97,10 +92,7 @@ class ModelRunOD(OrderedDict):
 		item = OrderedDict.__getitem__(self,key)
 		if key not in self.allowed_range:
 			self.log.warn("ON GETTING %s has no allowed_range." %(key))
-		if key not in self.descriptions:
-			self.log.warn("ON GETTING %s has no description." %(key))
-		if key not in self.units:
-			self.log.warn("ON GETTING %s has no units." %(key))
+		
 		return item
 
 	def copyasdict(self):
@@ -111,6 +103,38 @@ class ModelRunOD(OrderedDict):
 	
 	def __call__(self):
 		pass
+
+
+class ModelRunOD(RangeCheckOD):
+	"""
+	Range Checking OrderedDict subclass for storing values for variables and drivers. It also stores an additional dict of units for each driver,
+	and allowed values for each driver
+	"""
+	def __init__(self):
+		super(ModelRunOD,self).__init__()
+		self.log = logging.getLogger(self.__class__.__name__)
+		self.descriptions = dict()
+		self.units = dict()
+
+	def __setitem__(self,key,val):
+		"""Check that we obey the allowed_range"""
+		RangeCheckOD.__setitem__(self,key,val)
+		if key not in self.units:
+			self.log.warn("ON SETTING %s has no units. Setting to None" %(key))
+			self.units[key]=None
+		if key not in self.descriptions:
+			self.log.warn("ON SETTING %s has no description. Setting to None" %(key))
+			self.descriptions[key]=None		
+		
+	def __getitem__(self,key):
+		item = RangeCheckOD.__getitem__(self,key)
+		if key not in self.allowed_range:
+			self.log.warn("ON GETTING %s has no allowed_range." %(key))
+		if key not in self.descriptions:
+			self.log.warn("ON GETTING %s has no description." %(key))
+		if key not in self.units:
+			self.log.warn("ON GETTING %s has no units." %(key))
+		return item
 
 	
 class ModelRunDriversOD(ModelRunOD):
@@ -123,8 +147,9 @@ class ModelRunVariablesOD(ModelRunOD):
 	def __init__(self):
 		super(ModelRunVariablesOD,self).__init__()
 		#Add functionality for variable limits
-		self.lims = dict()
-		self._lims = dict()
+		self.lims = RangeCheckOD(allowed_range_peer=self)
+		self._lims = RangeCheckOD(allowed_range_peer=self)
+		#allowed_range_peer links allowed_range dictionaries in lims to main allowed_range
 		self.npts = dict()
 
 class ModelRun(object):
@@ -249,6 +274,14 @@ class ModelRun(object):
 		self.vars.npts['Longitude']=1
 		self.vars.npts['Altitude']=1
 		
+		
+		#Also set up allowed_ranges, so that we can't accidently 
+		#set latitude to be 100 or longitude to be -1000
+		self.vars.allowed_range['Latitude'] = [-90.,90.]
+		self.vars.allowed_range['Longitude'] = [-180.,180.]
+		self.vars.allowed_range['Altitude'] = [0.,1500.]
+		
+		#Set up the initial ranges for data grid generation
 		self.vars.lims['Latitude']=[-90.,90.]
 		self.vars.lims['Longitude']=[-180.,180.]
 		self.vars.lims['Altitude']=[0.,400.]
@@ -366,7 +399,7 @@ class ModelRun(object):
 		for v in self.vars:
 			self.vars[v] = np.reshape(self.vars[v],self.shape)
 			self.vars._lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
-			if v not in ['Latitude','Longitude','Altitude']: #Why do we do this again? Why not the positions?
+			if v not in ['Latitude','Longitude','Altitude']: #Why do we do this again? Why not the positions? Because the positions create the grid
 				self.vars.lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
 			
 			
@@ -424,6 +457,67 @@ class ModelRun(object):
 				else:
 					return self.vars[key],self.vars.lims[key]
 
+class IRIRun(ModelRun):
+	""" Class for individual calls to IRI """
+	import iripy
+	
+	def __init__(self):
+		"""Initialize HWM ModelRun Subclass"""
+		super(IRIRun,self).__init__()
+		#HWM DRIVERS
+		#ap - float
+		#	daily AP magnetic index
+		#Overwrite the superclass logger
+		self.log = logging.getLogger(__name__)
+		
+		self.modelname = "International Reference Ionosphere 2011 (IRI-2011)"
+
+		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
+		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2012,12,31,23,59,59)]
+		self.drivers.units['dt'] = 'UTC'
+		
+		self.drivers['f107']=None
+		self.drivers.allowed_range['f107'] = [65.,350.]
+		self.drivers.units['f107'] = 'SFU' #No units 
+		self.drivers.descriptions['f107'] = 'Solar 10.7 cm Flux'
+
+		self.drivers['f107_81']=None
+		self.drivers.allowed_range['f107_81'] = [65.,350.]
+		self.drivers.units['f107_81'] = 'SFU' #No units
+		self.drivers.descriptions['f107_81'] = '81-Day Average Solar 10.7 cm Flux'
+
+		self.vars.allowed_range['Altitude'] = [50.,1500.]
+		#Set a more sane default grid range
+		self.vars.lims['Altitude'] = [50.,250.]
+	
+	def populate(self):
+
+		super(IRIRun,self).populate()
+		
+		self.log.info( "Now runing IRI2011 for %s...\n" % (self.drivers['dt'].strftime('%c')))
+		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
+
+
+		#Call the F2Py Wrapper on the Fortran IRI
+		outdata,descriptions,units,outdrivers = iripy.iri_call(self.flatlat,self.flatlon,self.flatalt,
+			self.drivers['dt'],f107=self.drivers['f107'],f107_81=self.drivers['f107_81'])
+		
+		#Copy the output drivers into the drivers dictionary
+		for d in outdrivers:
+			self.drivers[d] = outdrivers[d] if isinstance(outdrivers[d],datetime.datetime) else float(outdrivers[d])
+
+
+		#Now add all ionospheric variables (density, temperature) to the dictionary
+		#Also add the units, and descriptions
+		for var in outdata:
+			self.vars[var] = outdata[var]
+			self.vars.units[var] = units[var]
+			self.vars.descriptions[var] = descriptions[var]
+
+		#Finish reshaping the data
+		self.finalize()
+
+
 class HWMRun(ModelRun):
 	""" Class for individual calls to HWM """
 	import hwmpy
@@ -448,6 +542,7 @@ class HWMRun(ModelRun):
 		self.drivers.units['ap'] = 'unitless' #No units 
 
 		self.vars.allowed_range['Altitude'] = [100.,500.]
+		self.vars.lims['Altitude'] = [100.,500.]
 		
 	def populate(self):
 
@@ -534,16 +629,16 @@ class MsisRun(ModelRun):
 		self.log.info( "Now runing NRLMSISE00 for %s...\n" % (self.drivers['dt'].strftime('%c')))
 		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
-		self.species,self.t_exo,self.t_alt,outdrivers = msispy.msis(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
+		self.species,self.t_exo,self.t_alt,units,descriptions,outdrivers = msispy.msis(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
 		
 		#Copy the output drivers into the drivers dictionary
 		for d in outdrivers:
 			self.drivers[d] = outdrivers[d]
 
 		#Now add temperature the variables dictionary
-		self.vars['T_exospheric'] = self.t_exo
-		self.vars.units['T_exospheric'] = 'K'
-		self.vars.descriptions['T_exospheric'] = 'Exospheric Temperature'
+		self.vars['T_exo'] = self.t_exo
+		self.vars.units['T_exo'] = 'K'
+		self.vars.descriptions['T_exo'] = 'Exospheric Temperature'
 		
 		self.vars['Temperature'] = self.t_alt
 		self.vars.units['Temperature'] = 'K'
@@ -600,6 +695,8 @@ class ModelRunner(object):
 			self.nextrun = MsisRun()
 		elif self.model.lower() == 'hwm':
 			self.nextrun = HWMRun()
+		elif self.model.lower() == 'iri':
+			self.nextrun = IRIRun()
 		else:
 			raise ValueError("%s is not a valid model to run" % (self.model))
 
@@ -965,7 +1062,7 @@ class PlotDataHandler(object):
 				self.ax.legend()
 
 				#self.ax.set_ylim(0,np.log(self.ybounds[1]))
-			self.ax.set_title('%s vs. %s' % (xnm if not self.xlog else 'log(%s)'%(xnm),ynm if not self.ylog else 'log(%s)'%(ynm)))
+			self.ax.set_title('%s vs. %s' % (xnm if not self.xlog else 'log(%s)'%(xnm),ynm if not self.ylog else 'log(%s)'%(ynm)),y=1.08)
 			self.ax.grid(True,linewidth=.1)
 			if not self.xlog and not self.ylog:
 				self.ax.set_aspect(1./self.ax.get_data_ratio())
@@ -986,6 +1083,10 @@ class PlotDataHandler(object):
 			ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
 			znm = self.zname
 			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
+
+			#nn = np.isfinite(self.x)
+			#nn = np.logical_and(nn,np.isfinite(self.y))
+			#nn = np.logical_and(nn,np.isfinite(self.z))
 
 			mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
 			#m.draw()
@@ -1082,7 +1183,7 @@ class PlotDataHandler(object):
 
 			self.cb.set_label(znm)
 			self.ax.set_title('%s Projection Map of %s' % (self.supported_projections[self.mapproj],
-				znm if not self.zlog else 'log(%s)' % (znm)))
+				znm if not self.zlog else 'log(%s)' % (znm)),y=1.08)
 			self.map = m
 		#Now call the canvas cosmetic adjustment routine
 		self.canvas.apply_lipstick()
