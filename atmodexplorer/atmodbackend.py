@@ -39,16 +39,27 @@ class RangeCheckOD(OrderedDict):
 		#allow on-the-fly copy of allowed range values from another object
 		self.allowed_range_peer = allowed_range_peer
 
+	def type_sanitize(self,key,val):
+		"""Check that the value is of the same general type as the previous value"""
+		oldval = self[key]
+		for t in [list,dict,float,int,str]:
+			if isinstance(oldval,t) and not isinstance(val,t):
+				self.log.debug("Old value for %s was a %s, and %s is not...leaving old value" % (key,str(t),str(val)))
+				return oldval
+			else:
+				return val
+		return val
+				
 	def range_correct(self,key,val):
 		"""Check that the value about to be set at key, is within the specified allowed_range for that key"""
 		if isinstance(val,np.ndarray):
 			outrange = np.logical_or(val < float(self.allowed_range[key][0]),val > float(self.allowed_range[key][1]))
 			val[outrange] = np.nan
-			if np.flatnonzero(outrange).shape[0] > 1:
-				self.log.debug("%d values were out of range for key %s allowed_range=(%.3f-%.3f)" %(np.flatnonzero(outrange).shape[0],
-					key,self.allowed_range[key][0],self.allowed_range[key][1]))
-			else:
-				self.log.debug("No values were out of range for key %s" % (key))
+			#if np.flatnonzero(outrange).shape[0] > 1:
+				#self.log.debug("%d values were out of range for key %s allowed_range=(%.3f-%.3f)" %(np.flatnonzero(outrange).shape[0],
+				#	key,self.allowed_range[key][0],self.allowed_range[key][1]))
+			#else:
+				#self.log.debug("No values were out of range for key %s" % (key))
 		elif isinstance(val,list):
 			for k in range(len(val)):
 				v = val[k]
@@ -79,10 +90,13 @@ class RangeCheckOD(OrderedDict):
 
 	def __setitem__(self,key,val):
 		"""Check that we obey the allowed_range"""
+		if key in self:
+			val = self.type_sanitize(key,val)
 		if self.allowed_range_peer is not None:
 			self.allowed_range = getattr(self.allowed_range_peer,'allowed_range')
 		if key not in self.allowed_range:
-			self.log.warn("ON SETTING %s has no allowed_range. Skipping range check" %(key))
+			pass
+			#self.log.warn("ON SETTING %s has no allowed_range. Skipping range check" %(key))
 		else:
 			val = self.range_correct(key,val)
 
@@ -90,9 +104,8 @@ class RangeCheckOD(OrderedDict):
 
 	def __getitem__(self,key):
 		item = OrderedDict.__getitem__(self,key)
-		if key not in self.allowed_range:
-			self.log.warn("ON GETTING %s has no allowed_range." %(key))
-		
+		#if key not in self.allowed_range:
+			#self.log.warn("ON GETTING %s has no allowed_range." %(key))
 		return item
 
 	def copyasdict(self):
@@ -120,20 +133,20 @@ class ModelRunOD(RangeCheckOD):
 		"""Check that we obey the allowed_range"""
 		RangeCheckOD.__setitem__(self,key,val)
 		if key not in self.units:
-			self.log.warn("ON SETTING %s has no units. Setting to None" %(key))
 			self.units[key]=None
+		#	self.log.warn("ON SETTING %s has no units. Setting to None" %(key))
 		if key not in self.descriptions:
-			self.log.warn("ON SETTING %s has no description. Setting to None" %(key))
 			self.descriptions[key]=None		
+		#	self.log.warn("ON SETTING %s has no description. Setting to None" %(key))
 		
 	def __getitem__(self,key):
 		item = RangeCheckOD.__getitem__(self,key)
-		if key not in self.allowed_range:
-			self.log.warn("ON GETTING %s has no allowed_range." %(key))
-		if key not in self.descriptions:
-			self.log.warn("ON GETTING %s has no description." %(key))
-		if key not in self.units:
-			self.log.warn("ON GETTING %s has no units." %(key))
+		#if key not in self.allowed_range:
+		#	self.log.warn("ON GETTING %s has no allowed_range." %(key))
+		#if key not in self.descriptions:
+		#	self.log.warn("ON GETTING %s has no description." %(key))
+		#if key not in self.units:
+		#	self.log.warn("ON GETTING %s has no units." %(key))
 		return item
 
 	
@@ -391,12 +404,18 @@ class ModelRun(object):
 		"""
 		Call after populate to finish shaping the data and filling the lims dict
 		"""
+
 		#Now make everything into the appropriate shape, if were
 		#expecting grids. Otherwise make everything into a column vector
 		if self.shape is None:
 			self.shape = (self.npts,1)
 			
 		for v in self.vars:
+			#Handle the potential for NaN or +-Inf values
+			good = np.isfinite(self.vars[v])
+			nbad = np.count_nonzero(np.logical_not(good))
+			if nbad >= len(self.vars[v])/2:
+				self.log.warn("Variable %s had more than half missing or infinite data!" % (str(v)))
 			self.vars[v] = np.reshape(self.vars[v],self.shape)
 			self.vars._lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
 			if v not in ['Latitude','Longitude','Altitude']: #Why do we do this again? Why not the positions? Because the positions create the grid
@@ -471,6 +490,25 @@ class IRIRun(ModelRun):
 		self.log = logging.getLogger(__name__)
 		
 		self.modelname = "International Reference Ionosphere 2011 (IRI-2011)"
+		self.modeldesc = textwrap.dedent("""
+		
+		The International Reference Ionosphere (IRI) is an international project sponsored by
+		the Committee on Space Research (COSPAR) and the International Union of Radio Science (URSI).
+		These organizations formed a Working Group (members list) in the late sixties to produce an
+		empirical standard model of the ionosphere, based on all available data sources (charter ).
+		Several steadily improved editions of the model have been released. For given location, time
+		and date, IRI provides monthly averages of the electron density, electron temperature, ion temperature,
+		and ion composition in the altitude range from 50 km to 2000 km. Additionally parameters given by IRI
+		include the Total Electron Content (TEC; a user can select the starting and ending height of the integral),
+		the occurrence probability for Spread-F and also the F1-region, and the equatorial vertical ion drift.
+
+		THE ALTITUDE LIMITS ARE:  LOWER (DAY/NIGHT)  UPPER        ***
+			ELECTRON DENSITY         60/80 KM       1000 KM       ***
+			TEMPERATURES              120 KM        2500/3000 KM  ***
+			ION DENSITIES             100 KM        1000 KM       ***
+
+		(text from: http://iri.gsfc.nasa.gov/)
+		""")
 
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
 		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2012,12,31,23,59,59)]
@@ -599,6 +637,35 @@ class MsisRun(ModelRun):
 		self.log = logging.getLogger(self.__class__.__name__)
 
 		self.modelname = "NRLMSISE00"
+		self.modeldesc = textwrap.dedent("""
+			This version of the venerable mass-spectrometer and incoherent scatter radar model
+			also incorporates mass density data derived from drag measurements and orbit determination.
+			It includes the same  database as the Jacchia family of models, and has been seen to outperform
+			both the older MSIS90 and the ubiquitous Jacchia-70. It's purpose is to specify the mass-density,
+			temperature and neutral species composition from the ground to the bottom of the exosphere
+			(around 1400km altitude). It provides number densities for the major neutral atmosphere constituents:
+			atomic and molecular nitrogen and oxygen, argon, helium and hydrogen. Additionally it includes a
+			species referred to as anomalous oxygen which includes O+ ion and hot atomic oxygen,
+			which was added to model these species' significant contributions to satellite drag at high latitude
+			and altitude, primarily during the summer months [picone]. The model inputs are the location, date,
+			and time of day, along with the 10.7 cm solar radio flux (F10.7) and the AP planetary activity index.
+
+			 NOTES ON INPUT VARIABLES:
+			C        UT, Local Time, and Longitude are used independently in the
+			C        model and are not of equal importance for every situation.
+			C        For the most physically realistic calculation these three
+			C        variables should be consistent (STL=SEC/3600+GLONG/15).
+			C        The Equation of Time departures from the above formula
+			C        for apparent local time can be included if available but
+			C        are of minor importance.
+			c
+			C        F107 and F107A values used to generate the model correspond
+			C        to the 10.7 cm radio flux at the actual distance of the Earth
+			C        from the Sun rather than the radio flux at 1 AU. The following
+			C        site provides both classes of values:
+			C        ftp://ftp.ngdc.noaa.gov/STP/SOLAR_DATA/SOLAR_RADIO/FLUX/
+		""")
+
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
 		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1,0,0,0),datetime.datetime(2012,12,31,23,59,59)]
 		self.drivers.descriptions['dt'] = 'Date and time of model run'
@@ -658,11 +725,11 @@ class MsisRun(ModelRun):
 	
 class ModelRunner(object):
 	""" Makes model calls """
-	def __init__(self,canvas=None,model="msis"):
+	def __init__(self,canvas=None,firstmodel="msis"):
 		self.log = logging.getLogger(self.__class__.__name__)
 
 		self.cv = canvas
-		self.model = model
+		self.model = firstmodel
 
 		#Init the runs list (holds each run in sequence)
 		self.runs = []
@@ -949,7 +1016,41 @@ class PlotDataHandler(object):
 
 
 		self.ax.cla()
+		self.ax.get_xaxis().set_visible(True)
+		self.ax.get_yaxis().set_visible(True)			
 		self.fig.suptitle('')
+
+		#Check that we actually have something to plot
+		#If we have less that 50% of data, add warnings and don't plot anything
+		self.ax.set_xlim([-1,1])
+		self.ax.set_ylim([-1,1])
+		if self.z is not None:
+			if np.count_nonzero(np.isfinite(self.z)) < len(self.z)/2:
+				self.ax.text(0,0,"%s is unavailable for this position/altitude" % ((self.zname)),
+					ha='center',va='center',color="r")
+				self.ax.get_xaxis().set_visible(False)
+				self.ax.get_yaxis().set_visible(False)
+				return
+		if self.x is not None:
+			xlist = [self.x] if not self.xmulti else self.x
+			xnamelist = [self.xname] if not self.xmulti else self.xname
+			for i in range(len(xlist)):
+				if np.count_nonzero(np.isfinite(xlist[i])) < len(xlist[i])/2:
+					self.ax.text(0,0,"%s is unavailable for this position/altitude" % ((xnamelist[i])),
+						ha='center',va='center',color="r")
+					self.ax.get_xaxis().set_visible(False)
+					self.ax.get_yaxis().set_visible(False)
+					return
+		if self.y is not None:
+			ylist = [self.y] if not self.ymulti else self.y
+			ynamelist = [self.yname] if not self.ymulti else self.yname
+			for i in range(len(ylist)):
+				if np.count_nonzero(np.isfinite(ylist[i])) < len(ylist[i])/2:
+					self.ax.text(0,0,"%s is unavailable for this position/altitude" % ((ynamelist[i])),
+						ha='center',va='center',color="r")
+					self.ax.get_xaxis().set_visible(False)
+					self.ax.get_yaxis().set_visible(False)
+					return
 
 		#self.zbounds = (np.nanmin(self.z),np.nanmax(self.z))
 		
