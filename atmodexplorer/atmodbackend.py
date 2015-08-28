@@ -1014,7 +1014,6 @@ class PlotDataHandler(object):
 			self.cb.remove()
 			self.cb = None
 
-
 		self.ax.cla()
 		self.ax.get_xaxis().set_visible(True)
 		self.ax.get_yaxis().set_visible(True)			
@@ -1215,7 +1214,7 @@ class PlotDataHandler(object):
 
 			self.cb.set_label(znm)
 			self.ax.set_aspect(1./self.ax.get_data_ratio())
-			self.fig.suptitle('%s vs. %s (color:%s)' % (xnm,ynm,
+			self.ax.set_title('%s vs. %s (color:%s)' % (xnm,ynm,
 				znm if not self.zlog else 'log(%s)'% znm))
 			
 		elif self.plottype == 'map':
@@ -1279,7 +1278,7 @@ class PlotDataHandler(object):
 				self.cb.ax.set_position([.1,.05,.8,.15])
 				self.ax.set_position([.1,.2,.8,.7])
 			elif self.mapproj == 'moll':
-				self.cb.ax.set_position([.1,.03,.8,.13])
+				self.cb.ax.set_position([.1,.05,.8,.13])
 				self.ax.set_position([.05,.2,.9,.9])
 
 			self.cb.set_label(znm)
