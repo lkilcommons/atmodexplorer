@@ -306,7 +306,8 @@ class ModelRun(object):
 		#want that.
 		for k in self.vars.lims:
 			self.vars._lims[k] = self.vars.lims[k]
-			self.vars.allowed_range[k] = self.vars.lims[k]
+			#WTF is this????
+			#self.vars.allowed_range[k] = self.vars.lims[k]
 
 		#The units dictionary simply holds the unit for a variable
 		self.vars.units['Latitude'] = 'deg'
