@@ -28,6 +28,8 @@ from collections import OrderedDict
 import logging
 logging.basicConfig(level=logging.INFO)
 
+from cStringIO import StringIO
+
 class RangeCheckOD(OrderedDict):
 	"""
 	OrderedDict subclass that ensures that keys that are numerical are within a certain range
@@ -359,8 +361,33 @@ class ModelRun(object):
 		else:
 			raise RuntimeError('Cannot set %s as y, not a variable!'%(key))
 
-	def as_csv(self):
-		pass
+	def as_csv(self,varkeys):
+		"""
+		Serialize a list of variables as a CSV or JSON string 
+		""" 
+		#Make sure that we don't have any iterables as members of varkeys
+		#(happens when plotting multiple variables on same axes)
+		flatkeys = []
+		for v in varkeys:
+			if isinstance(v,list) or isinstance(v,tuple):
+				flatkeys += [vv for vv in v]
+			else:
+				flatkeys.append(v)
+
+		bigheader = str(self).replace('|','\n')
+		bigheader += '\n'
+		onelineheader=''
+		dats,lims,units,desc = [],[],[],[]
+		for i,v in enumerate(flatkeys):
+			var,lim,unit,desc = self[v]
+			dats.append(var.flatten().reshape((-1,1))) #as a column
+			bigheader += "%d - %s (%s)[%s]\n" % (i+1,v,desc,unit)
+			onelineheader += v+','
+		onelineheader = onelineheader[:-1]
+		data = np.column_stack(dats)
+		fakefile = StringIO()
+		np.savetxt(fakefile,data,delimiter=',',fmt='%10.5e',header=onelineheader,comments='')
+		return fakefile.getvalue(),bigheader
 
 	def populate(self):
 		"""Populates itself with data"""
@@ -421,7 +448,6 @@ class ModelRun(object):
 			self.vars._lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
 			if v not in ['Latitude','Longitude','Altitude']: #Why do we do this again? Why not the positions? Because the positions create the grid
 				self.vars.lims[v] = [np.nanmin(self.vars[v].flatten()),np.nanmax(self.vars[v].flatten())]
-			
 			
 	def __str__(self):
 		"""
@@ -1078,9 +1104,9 @@ class PlotDataHandler(object):
 				self.ax.plot(self.x,self.y,*args,**kwargs)
 				xbnds = self.xbounds
 				ybnds = self.ybounds
-				xnm = self.xname  
+				xnm = self.xname if self.xdesc is None else self.xdesc
 				xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
-				ynm = self.yname 
+				ynm = self.yname if self.ydesc is None else self.ydesc
 				ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
 
 			elif self.xmulti and not self.ymulti: #Overplotting xvars
@@ -1091,7 +1117,7 @@ class PlotDataHandler(object):
 				xnm = ''
 				endut = self.xunits[0]
 				for i in range(len(self.xname)):
-					nm,ut = self.xname[i],self.xunits[i]
+					nm,ut = self.xname[i],self.xunits[i] 
 					if ut is not None and ut != endut:
 						xnm += nm+'[%s]'%(str(ut))+','
 					else:
@@ -1102,7 +1128,7 @@ class PlotDataHandler(object):
 				print xnm
 				print self.xbounds
 
-				ynm = self.yname 
+				ynm = self.yname if self.ydesc is None else self.ydesc
 				ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
 
 				for i in range(len(self.x)):
@@ -1178,11 +1204,11 @@ class PlotDataHandler(object):
 			self.log.info("Plottype is pcolor for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.xname),str(self.xbounds),
 				str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
 
-			xnm = self.xname
+			xnm = self.xname if self.xdesc is None else self.xdesc
 			xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
-			ynm = self.yname 
+			ynm = self.yname if self.ydesc is None else self.ydesc
 			ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
-			znm = self.zname
+			znm = self.zname if self.zdesc is None else self.zdesc
 			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
 
 			#nn = np.isfinite(self.x)
@@ -1223,7 +1249,7 @@ class PlotDataHandler(object):
 			#self.ybounds = [-90.,90.]
 			#self.xbounds = [-180.,180.]
 			
-			znm = self.zname
+			znm = self.zname if self.zdesc is None else self.zdesc
 			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
 
 			self.log.info("Plottype is %s projection MAP for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.mapproj),str(self.xname),str(self.xbounds),
