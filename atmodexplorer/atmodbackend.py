@@ -21,7 +21,6 @@ from mpl_toolkits.basemap import Basemap
 from matplotlib import ticker
 from matplotlib.colors import Normalize, LogNorm
 
-
 import msispy,hwmpy,iripy
 from collections import OrderedDict
 
@@ -538,7 +537,7 @@ class IRIRun(ModelRun):
 		""")
 
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
-		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2012,12,31,23,59,59)]
+		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2015,4,29,23,59,59)]
 		self.drivers.units['dt'] = 'UTC'
 		
 		self.drivers['f107']=None
@@ -599,7 +598,7 @@ class HWMRun(ModelRun):
 		self.modelname = "Horizontal Wind Model 07 (HWM07)"
 
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
-		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2012,12,31,23,59,59)]
+		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2015,4,29,23,59,59)]
 		self.drivers.units['dt'] = 'UTC'
 		
 		self.drivers['ap']=None
