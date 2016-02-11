@@ -8,7 +8,7 @@ import matplotlib.axes
 import numpy as np
 
 #import pandas as pd
-import sys, pdb, textwrap
+import sys, pdb, textwrap, itertools
 import datetime
 #sys.path.append('/home/liamk/mirror/Projects/geospacepy')
 #import special_datetime, lmk_utils, satplottools #Datetime conversion class
@@ -359,6 +359,89 @@ class ModelRun(object):
 			self.ykey = key
 		else:
 			raise RuntimeError('Cannot set %s as y, not a variable!'%(key))
+
+	def add_compound_var(self,varname,expr,description=None,units=None):
+		"""
+		Create a compound variable that incorporates other variables
+		Inputs:
+			expr, str:
+				A (python) mathematical expression involving the keys of other variables
+				defined in self.vars. Those variables must have been defined
+				before you add a compound variable involving them.
+			lims, tup or list:
+				(min,max) for plots of the variable
+			allowed_range, tup or list:
+				(min possible value,max possible value)
+		#--Not yet added--
+		#Optional arugments:
+		#	Arbitrary key-value pairs which can also be used to specify named
+		#	constants (i.e. mu0=4*np.pi*1e-7 for the permittivity of free space) 
+		"""
+		self.log.info('Begining addition of compound variable %s with expression %s' % (varname,expr))
+		#Sanitize the expression
+
+		#If we need numpy expressions
+		universal_locals = {}
+		if 'np.' in expr:
+			universal_locals['np'] = np
+
+		#Build up a list of local variables for when we eval the compound variable
+		eval_locals = OrderedDict()
+		#Make default descriptions and units strings
+		unitstr = expr
+		descstr = expr
+		#Parse starting with the longest variable names, 
+		#this prevents names in the expression which contain other variables
+		#i.e. N2 will be parsed out before N 
+		vars_by_longest_first = self.vars.keys()
+		vars_by_longest_first.sort(cmp=lambda s1,s2: len(s2)-len(s1))
+		parsed_expr = expr
+		for var in vars_by_longest_first:
+			if var in parsed_expr:
+				eval_locals[var]=self.vars[var] #Will be an np array
+				#Replace the string representing the variable in the expression with
+				#the value of the unit/decription of the that variable
+				#i.e. O2/N2 -> [#/cm^3/#/cm^3] and [Molecular Oxygen Number Density/Molecular Nitrogen Number Density]
+				unitstr = unitstr.replace(var,self.vars.units[var])
+				descstr = descstr.replace(var,self.vars.descriptions[var])
+				parsed_expr.replace(var,'')
+		#It's possible for a variable not to have an allowed_range. If any are missing, then default to no allowed range
+		#for the compound variable
+		do_allowed_range = all([hasattr(varRangeCheckOD,'allowed_range') for varRangeCheckOD in [self.vars[key] for key in eval_locals]])
+
+		if do_allowed_range:
+			#Evaluate the expression on all possible combinations of limits/ranges and pick 
+			#the smallest/largest to be the limits/ranges for the compound variable
+			indcombos = itertools.combinations_with_replacement((0,1),len(eval_locals.keys()))
+			range_results = [] 
+			for combo in indcombos:
+				lim_locals,range_locals = dict(),dict()
+				for var,cind in zip(eval_locals.keys(),combo):
+						range_locals[var] = self.vars.allowed_range[var][cind]
+				if do_allowed_range:
+					range_results.update(universal_locals)
+					range_results.append(eval(expr,range_locals))
+				self.log.debug('Among vars %s combo %s resulted in \nlimit result: %s\nrange result: %s' % (str(eval_locals.keys()),
+					str(combo),str(lim_results[-1]),'none' if not do_allowed_range else str(range_results[-1])))
+
+		#Check for NaN values in result
+		eval_locals.update(universal_locals)
+		compounddata = eval(expr,eval_locals)
+		compoundnnan = np.count_nonzero(np.logical_not(np.isfinite(compounddata)))
+		if compoundnnan > 0:
+			self.log.warn('Warning %d/%d NaN outputs were found in output from formula %s' % (compoundnnan,len(compounddata),expr))
+
+		self.vars[varname] = compounddata
+		self.vars.units[varname] = unitstr if units is None else units
+		self.vars.descriptions[varname] = descstr if description is None else description
+		self.vars.lims[varname] = [np.nanmin(compounddata),np.nanmax(compounddata)]
+		self.vars._lims[varname] = [np.nanmin(compounddata),np.nanmax(compounddata)]
+		if do_allowed_range:
+			self.vars.allowed_range[varname] = [np.nanmin(range_results),np.nanmax(range_results)]
+
+		self.log.debug('Added compound variable %s with limits: %s,\n allowed_range: %s,\n units: %s,\n description: %s' % (varname,
+			str(self.vars.lims[varname]),'N/A' if not do_allowed_range else str(self.vars.allowed_range[varname]),
+			str(self.vars.units[varname]),str(self.vars.descriptions[varname])))
 
 	def as_csv(self,varkeys):
 		"""
@@ -747,7 +830,8 @@ class MsisRun(ModelRun):
 				self.vars.descriptions[s] = 'Number Density of %s' % (s)
 
 		self.finalize()
-
+		self.add_compound_var('O2N2ratio','O2/N2',units='unitless',description='Oxygen/Nitrogen Ratio')
+		
 	
 class ModelRunner(object):
 	""" Makes model calls """
