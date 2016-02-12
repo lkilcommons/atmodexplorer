@@ -830,7 +830,7 @@ class MsisRun(ModelRun):
 				self.vars.descriptions[s] = 'Number Density of %s' % (s)
 
 		self.finalize()
-		self.add_compound_var('O2N2ratio','O2/N2',units='unitless',description='Oxygen/Nitrogen Ratio')
+		self.add_compound_var('ON2ratio','O/N2',units='unitless',description='Atomic Oxygen/Molecular Nitrogen Ratio')
 		
 	
 class ModelRunner(object):
