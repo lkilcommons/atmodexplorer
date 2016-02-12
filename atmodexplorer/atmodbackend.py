@@ -776,7 +776,7 @@ class MsisRun(ModelRun):
 		""")
 
 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
-		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1,0,0,0),datetime.datetime(2012,12,31,23,59,59)]
+		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1,0,0,0),datetime.datetime(2015,4,29,23,59,59)]
 		self.drivers.descriptions['dt'] = 'Date and time of model run'
 
 		self.drivers['f107']=None
