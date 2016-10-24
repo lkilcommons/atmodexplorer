@@ -21,7 +21,7 @@ from mpl_toolkits.basemap import Basemap
 from matplotlib import ticker
 from matplotlib.colors import Normalize, LogNorm
 
-import msispy,hwmpy,iripy
+import msispy
 from collections import OrderedDict
 
 import logging
@@ -585,134 +585,134 @@ class ModelRun(object):
 				else:
 					return self.vars[key],self.vars.lims[key]
 
-class IRIRun(ModelRun):
-	""" Class for individual calls to IRI """
-	import iripy
+# class IRIRun(ModelRun):
+# 	""" Class for individual calls to IRI """
+# 	#import iripy
 	
-	def __init__(self):
-		"""Initialize HWM ModelRun Subclass"""
-		super(IRIRun,self).__init__()
-		#HWM DRIVERS
-		#ap - float
-		#	daily AP magnetic index
-		#Overwrite the superclass logger
-		self.log = logging.getLogger(__name__)
+# 	def __init__(self):
+# 		"""Initialize HWM ModelRun Subclass"""
+# 		super(IRIRun,self).__init__()
+# 		#HWM DRIVERS
+# 		#ap - float
+# 		#	daily AP magnetic index
+# 		#Overwrite the superclass logger
+# 		self.log = logging.getLogger(__name__)
 		
-		self.modelname = "International Reference Ionosphere 2011 (IRI-2011)"
-		self.modeldesc = textwrap.dedent("""
+# 		self.modelname = "International Reference Ionosphere 2011 (IRI-2011)"
+# 		self.modeldesc = textwrap.dedent("""
 		
-		The International Reference Ionosphere (IRI) is an international project sponsored by
-		the Committee on Space Research (COSPAR) and the International Union of Radio Science (URSI).
-		These organizations formed a Working Group (members list) in the late sixties to produce an
-		empirical standard model of the ionosphere, based on all available data sources (charter ).
-		Several steadily improved editions of the model have been released. For given location, time
-		and date, IRI provides monthly averages of the electron density, electron temperature, ion temperature,
-		and ion composition in the altitude range from 50 km to 2000 km. Additionally parameters given by IRI
-		include the Total Electron Content (TEC; a user can select the starting and ending height of the integral),
-		the occurrence probability for Spread-F and also the F1-region, and the equatorial vertical ion drift.
+# 		The International Reference Ionosphere (IRI) is an international project sponsored by
+# 		the Committee on Space Research (COSPAR) and the International Union of Radio Science (URSI).
+# 		These organizations formed a Working Group (members list) in the late sixties to produce an
+# 		empirical standard model of the ionosphere, based on all available data sources (charter ).
+# 		Several steadily improved editions of the model have been released. For given location, time
+# 		and date, IRI provides monthly averages of the electron density, electron temperature, ion temperature,
+# 		and ion composition in the altitude range from 50 km to 2000 km. Additionally parameters given by IRI
+# 		include the Total Electron Content (TEC; a user can select the starting and ending height of the integral),
+# 		the occurrence probability for Spread-F and also the F1-region, and the equatorial vertical ion drift.
 
-		THE ALTITUDE LIMITS ARE:  LOWER (DAY/NIGHT)  UPPER        ***
-			ELECTRON DENSITY         60/80 KM       1000 KM       ***
-			TEMPERATURES              120 KM        2500/3000 KM  ***
-			ION DENSITIES             100 KM        1000 KM       ***
+# 		THE ALTITUDE LIMITS ARE:  LOWER (DAY/NIGHT)  UPPER        ***
+# 			ELECTRON DENSITY         60/80 KM       1000 KM       ***
+# 			TEMPERATURES              120 KM        2500/3000 KM  ***
+# 			ION DENSITIES             100 KM        1000 KM       ***
 
-		(text from: http://iri.gsfc.nasa.gov/)
-		""")
+# 		(text from: http://iri.gsfc.nasa.gov/)
+# 		""")
 
-		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
-		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2015,4,29,23,59,59)]
-		self.drivers.units['dt'] = 'UTC'
+# 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
+# 		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2015,4,29,23,59,59)]
+# 		self.drivers.units['dt'] = 'UTC'
 		
-		self.drivers['f107']=None
-		self.drivers.allowed_range['f107'] = [65.,350.]
-		self.drivers.units['f107'] = 'SFU' #No units 
-		self.drivers.descriptions['f107'] = 'Solar 10.7 cm Flux'
+# 		self.drivers['f107']=None
+# 		self.drivers.allowed_range['f107'] = [65.,350.]
+# 		self.drivers.units['f107'] = 'SFU' #No units 
+# 		self.drivers.descriptions['f107'] = 'Solar 10.7 cm Flux'
 
-		self.drivers['f107_81']=None
-		self.drivers.allowed_range['f107_81'] = [65.,350.]
-		self.drivers.units['f107_81'] = 'SFU' #No units
-		self.drivers.descriptions['f107_81'] = '81-Day Average Solar 10.7 cm Flux'
+# 		self.drivers['f107_81']=None
+# 		self.drivers.allowed_range['f107_81'] = [65.,350.]
+# 		self.drivers.units['f107_81'] = 'SFU' #No units
+# 		self.drivers.descriptions['f107_81'] = '81-Day Average Solar 10.7 cm Flux'
 
-		self.vars.allowed_range['Altitude'] = [50.,1500.]
-		#Set a more sane default grid range
-		self.vars.lims['Altitude'] = [50.,250.]
+# 		self.vars.allowed_range['Altitude'] = [50.,1500.]
+# 		#Set a more sane default grid range
+# 		self.vars.lims['Altitude'] = [50.,250.]
 	
-	def populate(self):
+# 	def populate(self):
 
-		super(IRIRun,self).populate()
+# 		super(IRIRun,self).populate()
 		
-		self.log.info( "Now runing IRI2011 for %s...\n" % (self.drivers['dt'].strftime('%c')))
-		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
+# 		self.log.info( "Now runing IRI2011 for %s...\n" % (self.drivers['dt'].strftime('%c')))
+# 		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
 
-		#Call the F2Py Wrapper on the Fortran IRI
-		outdata,descriptions,units,outdrivers = iripy.iri_call(self.flatlat,self.flatlon,self.flatalt,
-			self.drivers['dt'],f107=self.drivers['f107'],f107_81=self.drivers['f107_81'])
+# 		#Call the F2Py Wrapper on the Fortran IRI
+# 		outdata,descriptions,units,outdrivers = iripy.iri_call(self.flatlat,self.flatlon,self.flatalt,
+# 			self.drivers['dt'],f107=self.drivers['f107'],f107_81=self.drivers['f107_81'])
 		
-		#Copy the output drivers into the drivers dictionary
-		for d in outdrivers:
-			self.drivers[d] = outdrivers[d] if isinstance(outdrivers[d],datetime.datetime) else float(outdrivers[d])
+# 		#Copy the output drivers into the drivers dictionary
+# 		for d in outdrivers:
+# 			self.drivers[d] = outdrivers[d] if isinstance(outdrivers[d],datetime.datetime) else float(outdrivers[d])
 
 
-		#Now add all ionospheric variables (density, temperature) to the dictionary
-		#Also add the units, and descriptions
-		for var in outdata:
-			self.vars[var] = outdata[var]
-			self.vars.units[var] = units[var]
-			self.vars.descriptions[var] = descriptions[var]
+# 		#Now add all ionospheric variables (density, temperature) to the dictionary
+# 		#Also add the units, and descriptions
+# 		for var in outdata:
+# 			self.vars[var] = outdata[var]
+# 			self.vars.units[var] = units[var]
+# 			self.vars.descriptions[var] = descriptions[var]
 
-		#Finish reshaping the data
-		self.finalize()
+# 		#Finish reshaping the data
+# 		self.finalize()
 
 
-class HWMRun(ModelRun):
-	""" Class for individual calls to HWM """
-	import hwmpy
+# class HWMRun(ModelRun):
+# 	""" Class for individual calls to HWM """
+# 	#import hwmpy
 	
-	def __init__(self):
-		"""Initialize HWM ModelRun Subclass"""
-		super(HWMRun,self).__init__()
-		#HWM DRIVERS
-		#ap - float
-		#	daily AP magnetic index
-		#Overwrite the superclass logger
-		self.log = logging.getLogger(__name__)
+# 	def __init__(self):
+# 		"""Initialize HWM ModelRun Subclass"""
+# 		super(HWMRun,self).__init__()
+# 		#HWM DRIVERS
+# 		#ap - float
+# 		#	daily AP magnetic index
+# 		#Overwrite the superclass logger
+# 		self.log = logging.getLogger(__name__)
 		
-		self.modelname = "Horizontal Wind Model 07 (HWM07)"
+# 		self.modelname = "Horizontal Wind Model 07 (HWM07)"
 
-		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
-		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2015,4,29,23,59,59)]
-		self.drivers.units['dt'] = 'UTC'
+# 		self.drivers['dt']=datetime.datetime(2000,6,21,12,0,0)
+# 		self.drivers.allowed_range['dt'] = [datetime.datetime(1970,1,1),datetime.datetime(2015,4,29,23,59,59)]
+# 		self.drivers.units['dt'] = 'UTC'
 		
-		self.drivers['ap']=None
-		self.drivers.allowed_range['ap'] = [0,400]
-		self.drivers.units['ap'] = 'unitless' #No units 
+# 		self.drivers['ap']=None
+# 		self.drivers.allowed_range['ap'] = [0,400]
+# 		self.drivers.units['ap'] = 'unitless' #No units 
 
-		self.vars.allowed_range['Altitude'] = [100.,500.]
-		self.vars.lims['Altitude'] = [100.,500.]
+# 		self.vars.allowed_range['Altitude'] = [100.,500.]
+# 		self.vars.lims['Altitude'] = [100.,500.]
 		
-	def populate(self):
+# 	def populate(self):
 
-		super(HWMRun,self).populate()
+# 		super(HWMRun,self).populate()
 		
-		self.log.info( "Now runing HWM07 for %s...\n" % (self.drivers['dt'].strftime('%c')))
-		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
+# 		self.log.info( "Now runing HWM07 for %s...\n" % (self.drivers['dt'].strftime('%c')))
+# 		self.log.info( "Driver dict is %s\n" % (str(self.drivers)))
 
-		#Call the F2Py Wrapper on the Fortran HWM07
-		self.winds,outdrivers = hwmpy.hwm(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
+# 		#Call the F2Py Wrapper on the Fortran HWM07
+# 		self.winds,outdrivers = hwmpy.hwm(self.flatlat,self.flatlon,self.flatalt,**self.drivers)
 		
-		#Copy the output drivers into the drivers dictionary
-		for d in outdrivers:
-			self.drivers[d] = outdrivers[d]
+# 		#Copy the output drivers into the drivers dictionary
+# 		for d in outdrivers:
+# 			self.drivers[d] = outdrivers[d]
 
-		#Now add all the zonal and meridional winds to the dictionary
-		#Also add the units
-		for w in self.winds:
-			self.vars[w] = self.winds[w]
-			self.vars.units[w] = 'km/s'
+# 		#Now add all the zonal and meridional winds to the dictionary
+# 		#Also add the units
+# 		for w in self.winds:
+# 			self.vars[w] = self.winds[w]
+# 			self.vars.units[w] = 'km/s'
 
-		#Finish reshaping the data
-		self.finalize()
+# 		#Finish reshaping the data
+# 		self.finalize()
 
 #MSIS DRIVERS
 		#f107 - float
@@ -847,7 +847,6 @@ class ModelRunner(object):
 		self.init_nextrun()
 		self.nextrun.drivers['dt'] = datetime.datetime(2000,6,21,12,0,0) #Summer solstice
 
-
 		#Set counters
 		self.n_total_runs=0
 		self.n_max_runs=10
@@ -870,10 +869,10 @@ class ModelRunner(object):
 	def init_nextrun(self):
 		if self.model.lower() == 'msis':
 			self.nextrun = MsisRun()
-		elif self.model.lower() == 'hwm':
-			self.nextrun = HWMRun()
-		elif self.model.lower() == 'iri':
-			self.nextrun = IRIRun()
+		#elif self.model.lower() == 'hwm':
+		#	self.nextrun = HWMRun()
+		#elif self.model.lower() == 'iri':
+		#	self.nextrun = IRIRun()
 		else:
 			raise ValueError("%s is not a valid model to run" % (self.model))
 
@@ -954,7 +953,7 @@ class PlotDataHandler(object):
 		self.supported_projections={'mill':'Miller Cylindrical','moll':'Mollweide','ortho':'Orthographic'}
 		self.plottypes = dict()
 		self.plottypes['line'] = {'gridxy':False,'overplot_ready':True,'x_allowed':['all'],'y_allowed':['all'],'z_allowed':['none']}
-		self.plottypes['pcolor'] = {'gridxy':True,'overplot_ready':False,'x_allowed':['position'],'y_allowed':['position'],'z_allowed':['notposition']}
+		#self.plottypes['pcolor'] = {'gridxy':True,'overplot_ready':False,'x_allowed':['position'],'y_allowed':['position'],'z_allowed':['notposition']}
 		self.plottypes['map'] = {'gridxy':True,'overplot_ready':False,'x_allowed':['Longitude'],'y_allowed':['Latitude'],'z_allowed':['notposition']}
 		if plottype not in self.plottypes:
 			raise ValueError('Invalid plottype %s! Choose from %s' % (plottype,str(self.plottypes.keys())))
@@ -970,9 +969,9 @@ class PlotDataHandler(object):
 		#Generates a description of the graph
 		cap = "%s" % (str(self.xname) if not self.xlog else "log(%s)" % (str(self.xname)))
 		cap = cap + " vs. %s" % (str(self.yname) if not self.ylog else "log(%s)" % (str(self.yname)))
-		if self.plottype == 'pcolor':
-			cap = "Pseudocolor plot of "+ cap + " vs. %s" % (str(self.zname) if not self.zlog else "log(%s)" % (str(self.zname)))
-		elif self.plottype == 'map':
+		#if self.plottype == 'pcolor':
+		#	cap = "Pseudocolor plot of "+ cap + " vs. %s" % (str(self.zname) if not self.zlog else "log(%s)" % (str(self.zname)))
+		if self.plottype == 'map':
 			cap = "%s projection map of " % (self.supported_projections[self.mapproj])+ cap + \
 					" vs. %s" % (str(self.zname) if not self.zlog else "log(%s)" % (str(self.zname)))
 		return cap
@@ -1068,7 +1067,8 @@ class PlotDataHandler(object):
 					self.statistics['Median-%s'%(self.yname[n])]=np.median(self.y[n])
 					self.statistics['StDev-%s'%(self.yname[n])]=np.nanstd(self.y[n])
 
-		elif self.plottype=='map' or self.plottypes=='pcolor':
+		#elif self.plottype=='map' or self.plottypes=='pcolor':
+		elif self.plottype=='map':
 			self.statistics['Mean-%s'%(self.zname)]=np.nanmean(self.z)
 			self.statistics['Median-%s'%(self.zname)]=np.median(self.z)
 			self.statistics['StDev-%s'%(self.zname)]=np.nanstd(self.z)
@@ -1283,50 +1283,50 @@ class PlotDataHandler(object):
 			#except:
 			#	print "Tight layout for line failed"
 		
-		elif self.plottype == 'pcolor':
-			self.log.info("Plottype is pcolor for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.xname),str(self.xbounds),
-				str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
+		# elif self.plottype == 'pcolor':
+		# 	self.log.info("Plottype is pcolor for vars:\n--X=%s lims=(%s)\n--Y=%s lims=(%s)\n--C=%s lims=(%s)" % (str(self.xname),str(self.xbounds),
+		# 		str(self.yname),str(self.ybounds),str(self.zname),str(self.zbounds)))
 
-			xnm = self.xname if self.xdesc is None else self.xdesc
-			xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
-			ynm = self.yname if self.ydesc is None else self.ydesc
-			ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
-			znm = self.zname if self.zdesc is None else self.zdesc
-			znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
+		# 	xnm = self.xname if self.xdesc is None else self.xdesc
+		# 	xnm += '' if self.xunits is None else '[%s]' % (str(self.xunits))
+		# 	ynm = self.yname if self.ydesc is None else self.ydesc
+		# 	ynm += '' if self.yunits is None else '[%s]' % (str(self.yunits))
+		# 	znm = self.zname if self.zdesc is None else self.zdesc
+		# 	znm += '' if self.zunits is None else '[%s]' % (str(self.zunits))
 
-			#nn = np.isfinite(self.x)
-			#nn = np.logical_and(nn,np.isfinite(self.y))
-			#nn = np.logical_and(nn,np.isfinite(self.z))
+		# 	#nn = np.isfinite(self.x)
+		# 	#nn = np.logical_and(nn,np.isfinite(self.y))
+		# 	#nn = np.logical_and(nn,np.isfinite(self.z))
 
-			mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
-			#m.draw()
+		# 	mappable = self.ax.pcolormesh(self.x,self.y,self.z,norm=norm,shading='gouraud',**kwargs)
+		# 	#m.draw()
 
-			self.ax.set_xlabel(xnm)
-			if self.xlog:
-				self.ax.set_xscale('log',nonposx='clip')
-			self.ax.set_xlim(self.xbounds)
+		# 	self.ax.set_xlabel(xnm)
+		# 	if self.xlog:
+		# 		self.ax.set_xscale('log',nonposx='clip')
+		# 	self.ax.set_xlim(self.xbounds)
 
-			self.ax.set_ylabel(ynm)
+		# 	self.ax.set_ylabel(ynm)
 			
-			if self.ylog:
-				self.ax.set_xscale('log',nonposx='clip')
-			self.ax.set_ylim(self.ybounds)
+		# 	if self.ylog:
+		# 		self.ax.set_xscale('log',nonposx='clip')
+		# 	self.ax.set_ylim(self.ybounds)
 			
-			if self.zlog: #Locator goes to ticks argument
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter,ticks=locator)
-			else:
-				self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
+		# 	if self.zlog: #Locator goes to ticks argument
+		# 		self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal',format=formatter,ticks=locator)
+		# 	else:
+		# 		self.cb = self.fig.colorbar(mappable,ax=self.ax,orientation='horizontal')
 
-			#self.ax.set_position(self.axpos)
-			#self.cb.ax.set_position(self.cbpos)
-			self.cb.ax.set_position([.1,0,.8,.15])
-			self.ax.set_position([.1,.25,.8,.7])
+		# 	#self.ax.set_position(self.axpos)
+		# 	#self.cb.ax.set_position(self.cbpos)
+		# 	self.cb.ax.set_position([.1,0,.8,.15])
+		# 	self.ax.set_position([.1,.25,.8,.7])
 
-			self.cb.set_label(znm)
-			self.ax.set_aspect(1./self.ax.get_data_ratio())
-			self.ax.set_title('%s vs. %s (color:%s)' % (xnm,ynm,
-				znm if not self.zlog else 'log(%s)'% znm))
-			
+		# 	self.cb.set_label(znm)
+		# 	self.ax.set_aspect(1./self.ax.get_data_ratio())
+		# 	self.ax.set_title('%s vs. %s (color:%s)' % (xnm,ynm,
+		# 		znm if not self.zlog else 'log(%s)'% znm))
+
 		elif self.plottype == 'map':
 			#Basemap is too screwy for partial maps
 			#self.ybounds = [-90.,90.]
